@@ -1,0 +1,66 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>天启 Apocalypse | 焦点新闻流</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components/sprite-chat.css">
+    <link rel="stylesheet" href="css/components/music-player.css">
+    <link rel="stylesheet" href="css/pages/focus.css">
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+    <div class="noise-overlay"></div>
+
+    <header class="header">
+        <nav class="nav">
+            <div class="logo">天启</div>
+            <ul class="nav-links">
+                <li><a href="index.html">首页</a></li>
+                <li><a href="memos.html">笔记</a></li>
+                <li><a href="trending.html">热门项目</a></li>
+                <li><a href="papers.html">前沿论文</a></li>
+                <li><a href="focus.html" class="active">焦点新闻</a></li>
+                <li><a href="tools.html">工具箱</a></li>
+                <li><a href="space.html">联系作者</a></li>
+            </ul>
+            <div class="nav-user" id="nav-user-area"></div>
+            <div class="nav-toggle"><span></span><span></span><span></span></div>
+        </nav>
+    </header>
+
+    <div class="page-wrap">
+        <div class="focus-header">
+            <div class="section-label">LIVE FOCUS</div>
+            <h1 style="font-family:var(--font-display);font-size:2rem;font-weight:700">焦点<span
+                style="background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">新闻</span>
+            </h1>
+            <div class="updated-time" id="updated-time">数据同步中...</div>
+            <div class="cat-tabs" id="cat-tabs">
+                <button class="cat-tab active" data-cat="finance">💰 财经</button>
+                <button class="cat-tab" data-cat="tech">💻 科技</button>
+                <button class="cat-tab" data-cat="ai">🤖 AI</button>
+                <button class="cat-tab" data-cat="politics">🏛 时政</button>
+            </div>
+            <div class="src-tabs" id="src-tabs"></div>
+        </div>
+        <div id="news-grid" class="news-grid"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/auth.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/widgets/sprite-chat.js"></script>
+    <script src="js/widgets/music-player.js"></script>
+    <script src="js/pages/focus.js"></script>
+</body>
+
+</html>
+
+

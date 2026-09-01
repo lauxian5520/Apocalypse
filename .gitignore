@@ -1,0 +1,19 @@
+# Runtime data — never commit application state.
+# NOTE: var/ replaced the old backend/data + backend/uploads directories, which
+# WERE tracked. Run this once to stop tracking them:
+#     git rm -r --cached backend/data backend/uploads data
+var/
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store

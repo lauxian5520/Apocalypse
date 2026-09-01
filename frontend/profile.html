@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>天启 Apocalypse | 用户资料</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components/sprite-chat.css">
+  <link rel="stylesheet" href="css/components/music-player.css">
+    <link rel="stylesheet" href="css/pages/profile.css">
+</head>
+
+<body>
+  <div id="canvas-container"></div>
+  <div class="noise-overlay"></div>
+
+  <header class="header">
+    <nav class="nav">
+      <div class="logo">天启</div>
+      <ul class="nav-links">
+        <li><a href="index.html">首页</a></li>
+        <li><a href="memos.html">笔记</a></li>
+        <li><a href="messages.html">私聊</a></li>
+      </ul>
+      <div class="nav-user" id="nav-user-area"></div>
+      <div class="nav-toggle"><span></span><span></span><span></span></div>
+    </nav>
+  </header>
+
+  <main class="page-wrap">
+    <div class="glass-panel profile-card" id="profile-card">加载中…</div>
+  </main>
+
+  <div id="sprite-container"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/auth.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/widgets/sprite-chat.js"></script>
+  <script src="js/widgets/music-player.js"></script>
+  <script src="js/pages/profile.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,70 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>天启 Apocalypse | 热门项目雷达</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components/sprite-chat.css">
+    <link rel="stylesheet" href="css/components/music-player.css">
+    <link rel="stylesheet" href="css/pages/trending.css">
+</head>
+
+<body data-page="trending">
+    <div id="canvas-container"></div>
+    <div class="noise-overlay"></div>
+    <header class="header">
+        <nav class="nav">
+            <div class="logo">天启</div>
+            <ul class="nav-links">
+                <li><a href="index.html">首页</a></li>
+                <li><a href="memos.html">笔记</a></li>
+                <li><a href="trending.html" class="active">热门项目</a></li>
+                <li><a href="papers.html">前沿论文</a></li>
+                <li><a href="focus.html">焦点新闻</a></li>
+                <li><a href="tools.html">工具箱</a></li>
+                <li><a href="space.html">联系作者</a></li>
+            </ul>
+            <div class="nav-user" id="nav-user-area"></div>
+            <div class="nav-toggle"><span></span><span></span><span></span></div>
+        </nav>
+    </header>
+
+    <div class="page-wrap">
+        <div class="section-header" style="text-align:left;padding-top:2rem;margin-bottom:1.5rem">
+            <div class="section-label">TRENDING</div>
+            <h1 style="font-family:var(--font-display);font-size:2rem;font-weight:700">热门<span
+                    style="background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">项目</span>
+            </h1>
+        </div>
+
+        <!-- GitHub Trending -->
+        <div class="sub-title">⚡ GitHub Trending</div>
+        <div class="filters">
+            <span class="tag period-tab tag-active" data-period="daily">今日</span>
+            <span class="tag period-tab" data-period="weekly">本周</span>
+            <span class="tag period-tab" data-period="monthly">本月</span>
+        </div>
+        <div class="grid-3" id="github-grid"></div>
+
+        <!-- HuggingFace -->
+        <div class="sub-title" style="margin-top:3rem">🤗 HuggingFace 热门模型</div>
+        <div class="grid-3" id="hf-grid"></div>
+    </div>
+
+    <div id="sprite-container"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/auth.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/ui.js"></script>
+    <script src="js/pages/feeds.js"></script>
+    <script src="js/widgets/sprite-chat.js"></script>
+    <script src="js/widgets/music-player.js"></script>
+</body>
+
+</html>
+
+

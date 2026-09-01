@@ -1,0 +1,360 @@
+/* memos.css — page styles for memos.html. */
+body {
+    padding-top: 80px;
+}
+
+.page-layout {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 1.5rem 4rem;
+    position: relative;
+    z-index: 2;
+}
+
+/* Compose box */
+.compose-box {
+    margin-bottom: 2rem;
+}
+
+.compose-box .field {
+    margin-bottom: 1rem;
+}
+
+#memo-content {
+    min-height: 100px;
+}
+
+.compose-bottom {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+}
+
+.img-upload-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.img-upload-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+#memo-images {
+    display: none;
+}
+
+#image-preview {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
+.img-preview-item {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.img-preview-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.img-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.img-remove:hover {
+    background: rgba(255, 77, 109, 0.82);
+}
+
+.post-btn {
+    margin-left: auto;
+}
+
+#memo-visibility {
+    padding: 0.45rem 0.75rem;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+}
+
+.locate-btn {
+    padding: 0.45rem 0.75rem;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.locate-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.locate-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.memo-location {
+    display: inline-block;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--accent-2);
+}
+
+#memo-location-text {
+    font-size: 0.82rem;
+    color: var(--text-2);
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.location-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--text-2);
+    user-select: none;
+}
+
+.location-toggle input {
+    accent-color: var(--accent);
+}
+
+/* Memo cards */
+.memo-card {
+    margin-bottom: 1.25rem;
+}
+
+.memo-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.memo-author-info {
+    flex: 1;
+}
+
+.memo-author-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.memo-time {
+    font-size: 0.75rem;
+    color: var(--text-3);
+}
+
+.memo-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.memo-content {
+    font-size: 0.95rem;
+    line-height: 1.75;
+    color: var(--text-1);
+    white-space: pre-wrap;
+}
+
+.memo-images {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+}
+
+.memo-img {
+    width: 160px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    transition: transform var(--transition);
+}
+
+.memo-img:hover {
+    transform: scale(1.03);
+}
+
+.memo-footer {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+    color: var(--text-2);
+}
+
+.ai-explanation {
+    margin-top: 0.75rem;
+    padding: 0.85rem 1rem;
+    background: rgba(108, 99, 255, 0.07);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 0.9rem;
+}
+
+.ai-result {
+    font-size: 0.9rem;
+    color: var(--text-2);
+}
+
+.ai-result.error {
+    color: var(--danger);
+}
+
+/* Comments */
+.comments-section {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.comment-item {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+    align-items: flex-start;
+}
+
+.comment-body {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.85rem;
+    flex: 1;
+}
+
+.comment-author {
+    font-weight: 600;
+    margin-right: 0.5rem;
+}
+
+.comment-content {
+    color: var(--text-2);
+}
+
+.comment-del-btn {
+    float: right;
+    background: none;
+    border: none;
+    font-size: 0.75rem;
+    color: var(--text-3);
+    cursor: pointer;
+    padding: 0;
+}
+
+.comment-del-btn:hover {
+    color: var(--danger);
+}
+
+.comment-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.comment-input {
+    flex: 1;
+}
+
+.no-comments {
+    font-size: 0.85rem;
+    color: var(--text-3);
+    text-align: center;
+    padding: 0.5rem;
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--text-2);
+    padding: 3rem;
+}
+
+#load-more-btn {
+    display: none;
+    width: 100%;
+    margin-top: 1rem;
+}
+
+.memo-pin {
+    color: var(--accent-2);
+}
+
+.section-header {
+    padding-top: 2rem;
+    margin-bottom: 1.5rem;
+    text-align: left;
+}
+
+.page-title {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+.login-prompt {
+    background: rgba(108, 99, 255, 0.08);
+    border: 1px solid rgba(108, 99, 255, 0.2);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: var(--text-2);
+    font-size: 0.9rem;
+}
+
+.login-prompt a {
+    color: var(--accent);
+    font-weight: 500;
+}
+
+#memos-grid {
+    display: flex;
+    flex-direction: column;
+}

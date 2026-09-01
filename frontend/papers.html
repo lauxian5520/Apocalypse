@@ -1,0 +1,73 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>天启 Apocalypse | 前沿论文速览</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components/sprite-chat.css">
+    <link rel="stylesheet" href="css/components/music-player.css">
+    <link rel="stylesheet" href="css/pages/papers.css">
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+    <div class="noise-overlay"></div>
+
+    <header class="header">
+        <nav class="nav">
+            <div class="logo">天启</div>
+            <ul class="nav-links">
+                <li><a href="index.html">首页</a></li>
+                <li><a href="memos.html">笔记</a></li>
+                <li><a href="trending.html">热门项目</a></li>
+                <li><a href="papers.html" class="active">前沿论文</a></li>
+                <li><a href="focus.html">焦点新闻</a></li>
+                <li><a href="tools.html">工具箱</a></li>
+                <li><a href="space.html">联系作者</a></li>
+            </ul>
+            <div class="nav-user" id="nav-user-area"></div>
+            <div class="nav-toggle"><span></span><span></span><span></span></div>
+        </nav>
+    </header>
+
+    <div class="page-wrap">
+        <div class="section-header" style="text-align:left;padding-top:2rem;margin-bottom:1.2rem">
+            <div class="section-label">AI RESEARCH</div>
+            <h1 style="font-family:var(--font-display);font-size:2rem;font-weight:700">前沿<span
+                    style="background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">论文</span>
+            </h1>
+            <p class="section-desc">HuggingFace Daily Papers + ArXiv 热门学术内容</p>
+        </div>
+
+        <div class="source-tabs" id="source-tabs">
+            <button class="source-tab active" data-source="hf">🤗 HuggingFace</button>
+            <button class="source-tab" data-source="arxiv">🎓 ArXiv 论文</button>
+        </div>
+        
+        <div class="filters" id="period-tabs" style="margin-bottom: 1.2rem; display: flex;">
+            <span class="tag period-tab tag-active" data-period="daily">今日</span>
+            <span class="tag period-tab" data-period="weekly">本周</span>
+            <span class="tag period-tab" data-period="monthly">本月</span>
+            <span class="tag period-tab" data-period="halfyear">近半年</span>
+        </div>
+
+        <div class="grid-3" id="papers-grid"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/auth.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/pages/feeds.js"></script>
+  <script src="js/widgets/sprite-chat.js"></script>
+    <script src="js/widgets/music-player.js"></script>
+    <script src="js/pages/papers.js"></script>
+</body>
+
+</html>
+
+

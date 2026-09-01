@@ -1,0 +1,43 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>天启 Apocalypse | 登录</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/pages/login.css">
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+    <div class="noise-overlay"></div>
+    <div class="glass-panel auth-card">
+        <div class="auth-logo">天启</div>
+        <div class="auth-sub">欢迎回来，继续你的知识旅程</div>
+        <form class="auth-form" id="login-form" autocomplete="off">
+            <div class="field">
+                <label>用户名</label>
+                <input class="input" type="text" name="username" placeholder="请输入用户名" required>
+            </div>
+            <div class="field">
+                <label>密码</label>
+                <input class="input" type="password" name="password" placeholder="请输入密码" required>
+            </div>
+            <button class="submit-btn" type="submit">登 录</button>
+        </form>
+        <div class="auth-link">还没有账号？<a href="register.html">立即注册 →</a></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/auth.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/widgets/sprite-chat.js"></script>
+    <script src="js/pages/auth-forms.js"></script>
+</body>
+
+</html>
+
+

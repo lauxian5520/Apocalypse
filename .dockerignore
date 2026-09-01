@@ -1,0 +1,12 @@
+# Runtime state is mounted as a volume, never baked into the image.
+var/
+.env
+
+# Not needed at runtime
+tools/
+.git/
+.gitignore
+README.md
+LICENSE
+**/__pycache__/
+*.pyc

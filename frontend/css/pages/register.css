@@ -1,0 +1,124 @@
+/* register.css — page styles for register.html. */
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+}
+
+.auth-card {
+    width: min(90vw, 460px);
+    padding: 2.5rem;
+    position: relative;
+    z-index: 10;
+}
+
+.auth-logo {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.auth-sub {
+    text-align: center;
+    color: var(--text-2);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.captcha-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.captcha-row input {
+    flex: 1;
+}
+
+#captcha-img {
+    height: 50px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+}
+
+#captcha-refresh {
+    background: none;
+    border: none;
+    color: var(--text-2);
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+#captcha-refresh:hover {
+    color: var(--accent);
+}
+
+.submit-btn {
+    width: 100%;
+    padding: 0.85rem;
+    border: none;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition);
+    letter-spacing: 2px;
+}
+
+.submit-btn:hover {
+    background: #7c74ff;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(108, 99, 255, 0.35);
+}
+
+.auth-link {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-2);
+    margin-top: 1rem;
+}
+
+.auth-link a {
+    color: var(--accent);
+}
+
+.first-admin-note {
+    background: rgba(108, 99, 255, 0.1);
+    border: 1px solid rgba(108, 99, 255, 0.25);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+    color: var(--text-2);
+    text-align: center;
+}
+
+.avatar-upload-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.avatar-preview {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.05);
+}

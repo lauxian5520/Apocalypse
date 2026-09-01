@@ -1,0 +1,111 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>天启 Apocalypse | 后台管理</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/pages/admin.css">
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+    <div class="noise-overlay"></div>
+    <header class="header">
+        <nav class="nav">
+            <div class="logo">天启 <span style="font-size:0.7rem;color:var(--accent);margin-left:4px">ADMIN</span></div>
+            <ul class="nav-links">
+                <li><a href="index.html">返回首页</a></li>
+                <li><a href="memos.html">笔记</a></li>
+            </ul>
+            <div class="nav-user" id="nav-user-area"></div>
+            <div class="nav-toggle"><span></span><span></span><span></span></div>
+        </nav>
+    </header>
+
+    <main class="page-wrap" id="admin-main" style="display:none">
+        <div class="admin-section">
+            <h2>背景音乐管理</h2>
+            <div class="glass-panel" style="padding:1.5rem;margin-bottom:1.5rem">
+                <form class="upload-form" id="music-upload-form" enctype="multipart/form-data">
+                    <div class="row">
+                        <div class="field">
+                            <label>曲目标题 *</label>
+                            <input class="input" name="title" placeholder="歌曲名称" required>
+                        </div>
+                        <div class="field">
+                            <label>艺术家</label>
+                            <input class="input" name="artist" placeholder="歌手 / 作者">
+                        </div>
+                        <div class="field" style="min-width:80px;max-width:120px">
+                            <label>排序</label>
+                            <input class="input" name="sort_order" type="number" value="0" min="0">
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label>音频文件 (MP3/OGG/WAV, max 50MB) *</label>
+                        <input class="input" type="file" name="file" accept="audio/*" required>
+                    </div>
+                    <button class="btn btn-primary" type="submit">上传曲目</button>
+                </form>
+            </div>
+            <div class="track-list" id="track-list"></div>
+        </div>
+
+        <div class="admin-section">
+            <h2>数据爬虫控制</h2>
+            <div class="scraper-grid">
+                <div class="scraper-card">
+                    <h3>所有数据</h3>
+                    <small>GitHub + HuggingFace + 热点新闻全量刷新</small>
+                    <button class="btn btn-primary btn-sm" onclick="triggerRefresh()">立即刷新全部</button>
+                </div>
+            </div>
+            <div id="refresh-result" style="margin-top:1rem;font-size:0.85rem;color:var(--text-2)"></div>
+        </div>
+
+        <div class="admin-section">
+            <h2>用户管理</h2>
+            <div class="users-tools">
+                <input class="input" id="user-keyword" placeholder="按用户名/邮箱搜索" style="min-width:260px;max-width:360px">
+                <button class="btn btn-sm" id="user-search-btn">搜索</button>
+                <button class="btn btn-sm" id="user-refresh-btn">刷新</button>
+            </div>
+            <div class="users-table-wrap glass-panel" style="padding:0.6rem">
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>头像</th>
+                            <th>ID</th>
+                            <th>用户名</th>
+                            <th>邮箱</th>
+                            <th>身份</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <div id="no-perm" style="display:none;text-align:center;padding:5rem;color:var(--text-2)">
+        仅管理员可访问此页面<br>
+        <a href="login.html" style="color:var(--accent)">去登录</a>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/auth.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/widgets/sprite-chat.js"></script>
+    <script src="js/pages/admin.js"></script>
+</body>
+
+</html>
+
+
