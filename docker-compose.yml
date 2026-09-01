@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    container_name: myweb-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Runtime state lives on one volume, so one bind mount covers the
+      # database, uploads, music and the scraper cache.
+      VAR_DIR: /app/var
+    volumes:
+      - ./var:/app/var
+    ports:
+      - "8000:8000"
+
+  nginx:
+    image: nginx:alpine
+    container_name: myweb-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # For HTTPS: mount your SSL certs here
+      # - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - backend

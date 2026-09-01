@@ -1,0 +1,106 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>天启 Apocalypse | AI 知识航站</title>
+  <meta name="description" content="天启 Apocalypse：融合 AI 笔记、项目追踪、论文速览与焦点新闻的个人知识航站。">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components/sprite-chat.css">
+  <link rel="stylesheet" href="css/components/music-player.css">
+    <link rel="stylesheet" href="css/pages/index.css">
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div class="noise-overlay"></div>
+
+  <!-- Navigation -->
+  <header class="header">
+    <nav class="nav">
+      <div class="logo">天启</div>
+      <ul class="nav-links">
+        <li><a href="index.html" class="active">首页</a></li>
+        <li><a href="memos.html">笔记</a></li>
+        <li><a href="trending.html">热门项目</a></li>
+        <li><a href="papers.html">前沿论文</a></li>
+        <li><a href="focus.html">焦点新闻</a></li>
+        <li><a href="tools.html">工具箱</a></li>
+        <li><a href="space.html">联系作者</a></li>
+      </ul>
+      <div class="nav-user" id="nav-user-area"></div>
+      <div class="nav-toggle"><span></span><span></span><span></span></div>
+    </nav>
+  </header>
+
+  <!-- Time-rift sections -->
+  <main id="time-rift-main">
+    <!-- Section 0: Hero -->
+    <section class="rift-section active" data-index="0">
+      <div class="hero-orb"></div>
+      <div class="hero">
+        <div class="hero-eyebrow">记录 · 连接 · 生长</div>
+        <h1 class="hero-title">
+          <div class="line1">构建你的</div>
+          <div class="line2">知识坐标系</div>
+        </h1>
+        <p class="hero-desc">把笔记、热门项目、前沿论文与焦点新闻串成一条工作流，让灵感从输入走向输出。</p>
+        <div class="hero-actions">
+          <a href="memos.html" class="btn btn-primary">进入笔记流 →</a>
+          <a href="trending.html" class="btn">查看今日动向 →</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 1: Nav grid -->
+    <section class="rift-section" data-index="1">
+      <div style="text-align:center">
+        <div class="section-label">核心模块</div>
+        <h2 style="font-family:var(--font-display);font-size:2rem;margin-bottom:2rem">从这里开始你的一天</h2>
+        <div class="nav-grid">
+          <a href="memos.html"    class="nav-grid-item"><span class="nav-grid-icon">📝</span>我的笔记</a>
+          <a href="trending.html" class="nav-grid-item"><span class="nav-grid-icon">⚡</span>热门项目</a>
+          <a href="papers.html"   class="nav-grid-item"><span class="nav-grid-icon">📄</span>前沿论文</a>
+          <a href="focus.html"    class="nav-grid-item"><span class="nav-grid-icon">🔥</span>焦点新闻</a>
+          <a href="tools.html"    class="nav-grid-item"><span class="nav-grid-icon">🛠</span>工具箱</a>
+          <a href="space.html"    class="nav-grid-item"><span class="nav-grid-icon">✉️</span>联系作者</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 2: About -->
+    <section class="rift-section" data-index="2">
+      <div class="about-content">
+        <h2><span style="background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">天启</span> 是什么</h2>
+        <p>这是一个面向长期学习与持续创作的个人知识站：用更清晰的结构沉淀想法，用 AI 助手提升理解速度，用公开内容连接同频的人。</p>
+        <div class="tech-tags">
+          <span class="tag">Python FastAPI</span>
+          <span class="tag">Three.js</span>
+          <span class="tag">DeepSeek AI</span>
+          <span class="tag">SQLite</span>
+          <span class="tag">Docker</span>
+          <span class="tag">Glassmorphism</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Time-rift nav dots -->
+  <div class="time-rift-indicator" id="rift-indicator"></div>
+
+  <!-- AI Sprite -->
+  <div id="sprite-container"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/auth.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/widgets/sprite-chat.js"></script>
+  <script src="js/widgets/music-player.js"></script>
+    <script src="js/pages/index.js"></script>
+</body>
+</html>
+
+
+

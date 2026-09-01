@@ -1,0 +1,12 @@
+/* profile.css — page styles for profile.html. */
+body { padding-top: 80px; }
+.page-wrap { max-width: 860px; margin: 0 auto; padding: 2rem 1.2rem 4rem; position: relative; z-index: 2; }
+.profile-card { display: flex; gap: 1rem; align-items: center; padding: 1rem; }
+.profile-avatar { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); }
+.profile-name { font-size: 1.2rem; font-weight: 700; }
+.profile-sub { color: var(--text-2); font-size: 0.9rem; margin-top: 0.2rem; }
+.stats { margin-top: 1rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+.stat-item { padding: 0.7rem 0.8rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(255,255,255,0.03); }
+.stat-label { color: var(--text-3); font-size: 0.8rem; }
+.stat-value { margin-top: 0.2rem; font-weight: 600; }
+.actions { margin-top: 1rem; display: flex; gap: 0.6rem; }

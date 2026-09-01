@@ -1,0 +1,12 @@
+/* papers.css — page styles for papers.html. */
+body { padding-top: 80px; }
+.page-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 4rem; position: relative; z-index: 2; }
+.source-tabs { display: flex; gap: 0.6rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
+.source-tab { padding: 0.45rem 1rem; border-radius: 999px; font-size: 0.85rem; border: 1px solid var(--border); background: rgba(255,255,255,0.04); color: var(--text-2); cursor: pointer; transition: all var(--transition); }
+.source-tab.active { background: rgba(108,99,255,0.18); border-color: var(--accent); color: var(--accent); }
+
+.trending-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; margin-top: 1rem; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-top: 1.2rem; }
+@media (max-width: 992px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .grid-3 { grid-template-columns: 1fr; } }
+.ai-result { margin-top: 1rem; padding: 0.7rem 0.8rem; background: rgba(108,99,255,0.1); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; font-size: 0.86rem; color: var(--text-2); }

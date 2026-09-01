@@ -1,0 +1,66 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>天启 Apocalypse | 注册</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/pages/register.css">
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+    <div class="noise-overlay"></div>
+    <div class="glass-panel auth-card">
+        <div class="auth-logo">天启</div>
+        <div class="auth-sub">创建账号，开启你的知识工作流</div>
+        <div class="first-admin-note">第一个注册的用户将自动获得管理员权限</div>
+        <form class="auth-form" id="register-form" autocomplete="off" style="margin-top:1.25rem">
+            <div class="field">
+                <label>用户名</label>
+                <input class="input" type="text" name="username" placeholder="3-20 个字符" required minlength="3"
+                    maxlength="20">
+            </div>
+            <div class="field">
+                <label>邮箱</label>
+                <input class="input" type="email" name="email" placeholder="your@email.com" required>
+            </div>
+            <div class="field">
+                <label>密码</label>
+                <input class="input" type="password" name="password" placeholder="至少 8 位" required minlength="8">
+            </div>
+            <div class="field">
+                <label>头像（可选）</label>
+                <div class="avatar-upload-row">
+                    <img id="register-avatar-preview" class="avatar-preview" src="assets/images/default-avatar.svg" alt="头像预览">
+                    <input class="input" type="file" id="register-avatar" name="avatar" accept="image/png,image/jpeg,image/gif,image/webp">
+                </div>
+            </div>
+            <div class="field">
+                <label>验证码</label>
+                <div class="captcha-row">
+                    <input class="input" type="text" name="captcha" placeholder="输入图中字符" required maxlength="4"
+                        autocomplete="off">
+                    <img id="captcha-img" src="" alt="验证码" title="点击刷新">
+                    <button type="button" id="captcha-refresh" title="刷新">↺</button>
+                </div>
+            </div>
+            <button class="submit-btn" type="submit">注 册</button>
+        </form>
+        <div class="auth-link">已有账号？<a href="login.html">立即登录 →</a></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/auth.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/widgets/sprite-chat.js"></script>
+    <script src="js/pages/auth-forms.js"></script>
+    <script src="js/pages/register.js"></script>
+</body>
+
+</html>
+
+

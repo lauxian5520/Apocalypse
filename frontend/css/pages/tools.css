@@ -1,0 +1,13 @@
+/* tools.css — page styles for tools.html. */
+body { padding-top: 80px; }
+.page-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 4rem; position: relative; z-index: 2; }
+.tools-search { max-width: 480px; margin: 0 auto 2rem; position: relative; }
+.tools-search input { width: 100%; padding: 0.75rem 1rem 0.75rem 2.8rem; background: var(--glass-bg); border: 1px solid var(--border); border-radius: 999px; color: var(--text-1); font-size: 0.95rem; transition: all var(--transition); }
+.tools-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15); outline: none; }
+.tools-search::before { content: '🔍'; position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.tool-card { cursor: pointer; text-align: center; }
+.tool-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+.tool-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.35rem; }
+.tool-desc { font-size: 0.82rem; color: var(--text-2); }
+.tool-card:hover .tool-icon { animation: bounce 0.4s ease; }
+@keyframes bounce { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }

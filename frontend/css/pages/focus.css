@@ -1,0 +1,16 @@
+/* focus.css — page styles for focus.html. */
+body { padding-top: 80px; }
+.page-wrap { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 4rem; position: relative; z-index: 2; }
+.focus-header { text-align: center; margin-bottom: 1.4rem; }
+.updated-time { font-size: 0.8rem; color: var(--text-3); margin-bottom: 1rem; font-family: var(--font-mono); }
+.cat-tabs, .src-tabs { display: flex; justify-content: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.cat-tab, .src-tab { padding: 0.45rem 1rem; border-radius: 999px; border: 1px solid var(--border); background: rgba(255,255,255,0.04); color: var(--text-2); cursor: pointer; transition: all var(--transition); }
+.cat-tab.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+.src-tab.active { border-color: var(--accent-2); color: var(--accent-2); }
+.news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
+.news-card { background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; transition: all var(--transition); }
+.news-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.2); }
+.news-title { font-weight: 600; font-size: 0.95rem; line-height: 1.55; margin-bottom: 0.45rem; color: var(--text-1); }
+.news-src { color: var(--text-3); font-size: 0.78rem; margin-bottom: 0.4rem; }
+.news-link { color: var(--text-2); font-size: 0.83rem; }
+.news-link:hover { color: var(--accent); }
