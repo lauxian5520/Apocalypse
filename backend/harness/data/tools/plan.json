@@ -1,0 +1,45 @@
+{
+  "_comment": "Planning tools. exit_plan_mode ends the turn so the user can respond.",
+  "tools": [
+    {
+      "name": "todo_write",
+      "permission": "read",
+      "description": "记录或更新当前任务清单。每次调用都要传完整的清单（不是增量），用于让用户看到进度。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "todos": {
+            "type": "array",
+            "description": "完整的任务清单",
+            "items": {
+              "type": "object",
+              "properties": {
+                "content": { "type": "string", "description": "任务描述" },
+                "status": {
+                  "type": "string",
+                  "enum": ["pending", "in_progress", "completed"],
+                  "description": "任务状态"
+                }
+              },
+              "required": ["content", "status"]
+            }
+          }
+        },
+        "required": ["todos"]
+      }
+    },
+    {
+      "name": "exit_plan_mode",
+      "permission": "read",
+      "stops_turn": true,
+      "description": "把拟好的方案交给用户确认。调用后本轮立即结束，等待用户回复，不要继续执行。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "plan": { "type": "string", "description": "方案正文，支持 Markdown" }
+        },
+        "required": ["plan"]
+      }
+    }
+  ]
+}

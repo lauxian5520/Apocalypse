@@ -6,7 +6,9 @@ single place the URL map is defined, so `main.py` never lists routes.
 """
 from fastapi import APIRouter
 
-from routers import admin, ai, auth, comments, feeds, memos, messages, music, uploads, users
+from routers import (
+    admin, ai, auth, comments, feeds, harness, memos, messages, music, uploads, users,
+)
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(auth.router)
@@ -18,6 +20,7 @@ api_router.include_router(music.router)
 api_router.include_router(uploads.router)
 api_router.include_router(feeds.router)
 api_router.include_router(ai.router)
+api_router.include_router(harness.router)
 api_router.include_router(admin.router)
 
 __all__ = ["api_router"]

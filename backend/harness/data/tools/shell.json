@@ -1,0 +1,18 @@
+{
+  "_comment": "Shell tool contract. Only registered when HARNESS_SHELL_ENABLED is on.",
+  "tools": [
+    {
+      "name": "bash",
+      "permission": "exec",
+      "description": "在工作区目录下执行一条命令并返回输出。不支持管道、重定向、&& 等 shell 语法——请拆成多次调用。命令有 CPU、内存与超时限制，白名单之外的命令需要人工批准。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string", "description": "要执行的单条命令，例如 ls -la 或 python script.py" },
+          "timeout": { "type": "integer", "description": "超时秒数，留空用服务端默认值" }
+        },
+        "required": ["command"]
+      }
+    }
+  ]
+}

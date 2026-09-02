@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
+from core.providers import provider_config  # noqa: E402
 from services import ai_service  # noqa: E402
 
 PROMPT = [
@@ -18,7 +19,7 @@ PROMPT = [
 
 
 async def main() -> None:
-    cfg = ai_service._get_provider_config()
+    cfg = provider_config()
     print(f"provider = {cfg['model']} @ {cfg['url']}")
     print(f"api key  = {'set' if cfg['key'] else 'MISSING'}")
 

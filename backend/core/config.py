@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     upload_dir: str = ""
     music_dir: str = ""
     feeds_dir: str = ""
+    harness_dir: str = ""
 
     # ── Database ──────────────────────────────────────────────────
     db_type: str = "sqlite"
@@ -76,6 +77,20 @@ class Settings(BaseSettings):
     custom_api_key: str = ""
     custom_model: str = ""
 
+    # ── Harness ───────────────────────────────────────────────────
+    # The agent workbench. Defaults are the safe ones: admin-only, no shell.
+    harness_enabled: bool = True
+    harness_require_admin: bool = True
+    harness_preset: str = "standard"
+    harness_model: str = ""              # blank follows the provider's own model
+    harness_max_steps: int = 24
+    harness_context_budget_tokens: int = 48000
+    harness_shell_enabled: bool = False
+    harness_shell_timeout_seconds: int = 30
+    harness_shell_max_output_bytes: int = 32768
+    harness_workspace_quota_mb: int = 64
+    harness_search_url: str = ""         # blank uses the built-in DuckDuckGo endpoint
+
     # ── Server ────────────────────────────────────────────────────
     host: str = "0.0.0.0"
     port: int = 8000
@@ -97,6 +112,7 @@ class Settings(BaseSettings):
             "upload_dir": "uploads",
             "music_dir": "music",
             "feeds_dir": "feeds",
+            "harness_dir": "harness",
         }
         for field, relative in defaults.items():
             configured = getattr(self, field)
@@ -124,6 +140,11 @@ class Settings(BaseSettings):
         return str(Path(self.upload_dir) / "avatars")
 
     @property
+    def harness_workspace_dir(self) -> str:
+        """Root of the per-session agent workspaces."""
+        return str(Path(self.harness_dir) / "workspaces")
+
+    @property
     def origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
@@ -137,6 +158,8 @@ class Settings(BaseSettings):
             self.avatar_dir,
             self.music_dir,
             self.feeds_dir,
+            self.harness_dir,
+            self.harness_workspace_dir,
         ]
 
 

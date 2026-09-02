@@ -183,16 +183,24 @@ def delete_file(directory: str, filename: str) -> None:
         os.remove(path)
 
 
-def resolve_public_path(filename: str) -> str | None:
-    """Map a request path under /api/uploads to a real file, or None.
+def contained_path(root: str, relative: str) -> str | None:
+    """Resolve `relative` inside `root`, or None when it escapes.
 
-    Rejects anything that escapes the upload directory.
+    The single containment check in this codebase: uploads serve from it and
+    the harness sandbox jails its tools with it. Symlinks are resolved before
+    the comparison, so a link pointing outside `root` is rejected too.
     """
-    safe = os.path.normpath(filename).lstrip("/\\")
-    root = os.path.realpath(settings.upload_dir)
-    target = os.path.realpath(os.path.join(root, safe))
+    safe = os.path.normpath(relative).lstrip("/\\")
+    real_root = os.path.realpath(root)
+    target = os.path.realpath(os.path.join(real_root, safe))
     # Compare on a path-component boundary: a bare startswith() would also
     # accept a sibling directory such as "<uploads>_backup".
-    if target != root and not target.startswith(root + os.sep):
+    if target != real_root and not target.startswith(real_root + os.sep):
         return None
-    return target if os.path.isfile(target) else None
+    return target
+
+
+def resolve_public_path(filename: str) -> str | None:
+    """Map a request path under /api/uploads to a real file, or None."""
+    target = contained_path(settings.upload_dir, filename)
+    return target if target and os.path.isfile(target) else None

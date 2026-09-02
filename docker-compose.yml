@@ -14,6 +14,13 @@ services:
       - ./var:/app/var
     ports:
       - "8000:8000"
+    # Hardening for the harness: the agent can execute commands inside this
+    # container, so it gets no capabilities and cannot regain any.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
 
   nginx:
     image: nginx:alpine

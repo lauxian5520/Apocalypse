@@ -4,7 +4,10 @@
   window.__MW_SPRITE_CHAT_LOADED = true;
 
   const pageName = (location.pathname.split('/').pop() || '').toLowerCase();
-  const disableAiChatOnPage = pageName === 'messages.html';
+  // Pages that already own the conversation: the DM view (context confusion)
+  // and the harness workbench (two chat boxes on one screen).
+  const CHAT_HOSTING_PAGES = ['messages.html', 'harness.html'];
+  const disableAiChatOnPage = CHAT_HOSTING_PAGES.includes(pageName);
 
   function ensureContainer() {
     let el = document.getElementById('sprite-container');
