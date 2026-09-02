@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "argv[0] values the shell tool may run without asking a human first.",
+    "",
+    "The threat this guards against is the agent doing something surprising --",
+    "a prompt injection in a fetched page, a misread instruction -- not a",
+    "malicious operator, who could simply approve whatever they wanted.",
+    "",
+    "So the bar for auto-approval is: the command cannot execute arbitrary",
+    "code and cannot open a network connection. That rules out python, node,",
+    "git, curl, wget, and also find (-exec) and awk (system()). They are not",
+    "blocked, they just stop and ask -- which is the feature working, not a",
+    "failure. 'denied' is the narrower list that never runs at all."
+  ],
+  "auto_approved": [
+    "ls", "cat", "head", "tail", "wc", "stat", "file", "du", "df",
+    "echo", "pwd", "date", "env", "which", "basename", "dirname",
+    "grep", "rg", "sort", "uniq", "cut", "tr", "diff", "comm", "join",
+    "mkdir", "touch", "cp", "mv", "ln",
+    "md5sum", "sha256sum", "tree", "realpath"
+  ],
+  "denied": [
+    "sudo", "su", "doas", "chroot", "mount", "umount",
+    "shutdown", "reboot", "halt", "systemctl", "service", "kill", "killall",
+    "useradd", "usermod", "passwd", "chown", "chmod",
+    "ssh", "scp", "sftp", "nc", "ncat", "telnet", "socat",
+    "apt", "apt-get", "yum", "dnf", "pacman", "docker", "crontab"
+  ]
+}

@@ -1,11 +1,10 @@
 """AI endpoints: streaming chat, summarise, explain, provider list."""
-import json
-
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from core.deps import require_user
 from core.errors import AppError, ValidationError
+from core.sse import SSE_DONE, SSE_HEADERS, sse
 from models.user import User
 from schemas.ai import ChatIn, ExplainIn, ProviderOut, SummarizeIn
 from services import ai_service
@@ -16,15 +15,6 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 # so a long-lived chat tab cannot grow it until the model rejects it.
 MAX_HISTORY_MESSAGES = 20
 MAX_SUMMARIZE_CHARS = 8000
-
-SSE_HEADERS = {
-    "Cache-Control": "no-cache",
-    "X-Accel-Buffering": "no",      # tell nginx not to buffer the stream
-}
-
-
-def _sse(payload: dict) -> str:
-    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 @router.get("/providers", response_model=list[ProviderOut])
@@ -42,13 +32,13 @@ async def chat_stream(body: ChatIn, _: User = Depends(require_user)):
     async def event_generator():
         try:
             async for chunk in ai_service.chat_stream(messages):
-                yield _sse({"delta": chunk})
-            yield "data: [DONE]\n\n"
+                yield sse({"delta": chunk})
+            yield SSE_DONE
         except AppError as e:
             # The response has already begun, so errors travel in-band.
-            yield _sse({"error": e.message})
+            yield sse({"error": e.message})
         except Exception as e:
-            yield _sse({"error": str(e) or e.__class__.__name__})
+            yield sse({"error": str(e) or e.__class__.__name__})
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 

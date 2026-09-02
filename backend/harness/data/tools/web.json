@@ -1,0 +1,30 @@
+{
+  "_comment": "Network tools. Both are read-only with respect to the workspace.",
+  "tools": [
+    {
+      "name": "web_fetch",
+      "permission": "read",
+      "description": "抓取一个网页并返回其正文纯文本（已去掉脚本与样式）。用于阅读文档、README、文章。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "description": "完整的 http/https 地址" }
+        },
+        "required": ["url"]
+      }
+    },
+    {
+      "name": "web_search",
+      "permission": "read",
+      "description": "用搜索引擎检索，返回标题、摘要与链接列表。需要进一步阅读时再用 web_fetch 打开链接。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "搜索关键词" },
+          "limit": { "type": "integer", "description": "返回条数，默认 8，最多 20" }
+        },
+        "required": ["query"]
+      }
+    }
+  ]
+}

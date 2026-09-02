@@ -13,7 +13,8 @@ from typing import AsyncIterator
 import httpx
 
 from core.config import get_settings
-from core.errors import ConfigurationError, UpstreamError
+from core.errors import UpstreamError
+from core.providers import auth_headers, provider_config, require_configured
 
 settings = get_settings()
 
@@ -25,7 +26,7 @@ TEMPERATURE = 0.7
 
 def active_model() -> str:
     """Model name of the currently selected provider (used as a cache key)."""
-    return _get_provider_config().get("model", "")
+    return provider_config().get("model", "")
 
 
 def _error_text(exc: Exception) -> str:
@@ -45,63 +46,6 @@ def _error_text(exc: Exception) -> str:
             return f"HTTP {resp.status_code}: {body[:500]}"
         return f"HTTP {resp.status_code}"
     return str(exc) or exc.__class__.__name__
-
-
-def _get_provider_config() -> dict:
-    """Return API URL, key, and model name for the configured provider."""
-    p = settings.ai_provider.lower()
-    if p == "deepseek":
-        return {
-            "url": settings.deepseek_api_url,
-            "key": settings.deepseek_api_key,
-            "model": settings.deepseek_model,
-            "format": "openai",
-        }
-    elif p == "gemini":
-        return {
-            "url": settings.gemini_api_url,
-            "key": settings.gemini_api_key,
-            "model": settings.gemini_model,
-            "format": "openai",
-        }
-    elif p == "zhipu":
-        return {
-            "url": settings.zhipu_api_url,
-            "key": settings.zhipu_api_key,
-            "model": settings.zhipu_model,
-            "format": "openai",
-        }
-    elif p == "openai":
-        return {
-            "url": settings.openai_api_url,
-            "key": settings.openai_api_key,
-            "model": settings.openai_model,
-            "format": "openai",
-        }
-    elif p == "ollama":
-        return {
-            "url": f"{settings.ollama_base_url}/api/chat",
-            "key": "",
-            "model": settings.ollama_model,
-            "format": "ollama",
-        }
-    else:  # custom
-        return {
-            "url": settings.custom_api_url,
-            "key": settings.custom_api_key,
-            "model": settings.custom_model,
-            "format": "openai",
-        }
-
-
-def _require_configured(cfg: dict) -> None:
-    """Fail fast with an actionable message when the provider is not set up."""
-    if not cfg["url"]:
-        raise ConfigurationError(f"AI 未配置：provider={settings.ai_provider} 缺少 API URL")
-    if cfg["format"] != "ollama" and not cfg["key"]:
-        raise ConfigurationError(
-            f"AI 未配置：provider={settings.ai_provider} 缺少 API Key，请在 .env 中填写后重启服务"
-        )
 
 
 def _build_openai_payload(messages: list, model: str, stream: bool = False) -> dict:
@@ -124,12 +68,10 @@ def _build_ollama_payload(messages: list, model: str, stream: bool = False) -> d
 
 async def chat(messages: list[dict]) -> str:
     """Non-streaming chat — returns full response text."""
-    cfg = _get_provider_config()
-    _require_configured(cfg)
+    cfg = provider_config()
+    require_configured(cfg)
 
-    headers = {"Content-Type": "application/json"}
-    if cfg["key"]:
-        headers["Authorization"] = f"Bearer {cfg['key']}"
+    headers = auth_headers(cfg)
 
     is_ollama = cfg["format"] == "ollama"
     payload = (
@@ -177,12 +119,10 @@ async def _raise_for_stream_status(resp: httpx.Response, url: str) -> None:
 
 async def chat_stream(messages: list[dict]) -> AsyncIterator[str]:
     """Streaming chat — yields text chunks for SSE."""
-    cfg = _get_provider_config()
-    _require_configured(cfg)
+    cfg = provider_config()
+    require_configured(cfg)
 
-    headers = {"Content-Type": "application/json"}
-    if cfg["key"]:
-        headers["Authorization"] = f"Bearer {cfg['key']}"
+    headers = auth_headers(cfg)
 
     is_ollama = cfg["format"] == "ollama"
     payload = (

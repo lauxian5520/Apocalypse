@@ -17,6 +17,14 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 
+# The harness can run commands on behalf of a model, so the process must not be
+# root. /app/var is the one writable path; it is a volume, and the uid below
+# has to own it on the host too (see README).
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /app/var \
+    && chown -R app:app /app
+USER app
+
 WORKDIR /app/backend
 EXPOSE 8000
 

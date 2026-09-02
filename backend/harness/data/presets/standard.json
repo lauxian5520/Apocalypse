@@ -1,0 +1,13 @@
+{
+  "name": "standard",
+  "label": "标准模式",
+  "description": "完整能力：文件读写、检索、shell、联网与任务规划。",
+  "system_prompt": "system.md",
+  "max_steps": 24,
+  "tools": [
+    "read", "write", "edit", "glob", "grep",
+    "bash",
+    "web_fetch", "web_search",
+    "todo_write", "exit_plan_mode"
+  ]
+}

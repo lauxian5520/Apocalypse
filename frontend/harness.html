@@ -1,0 +1,99 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>天启 Apocalypse | Harness 智能体工作台</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components/sprite-chat.css">
+    <link rel="stylesheet" href="css/components/music-player.css">
+    <link rel="stylesheet" href="css/pages/harness.css">
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+    <div class="noise-overlay"></div>
+    <header class="header">
+        <nav class="nav">
+            <div class="logo">天启</div>
+            <ul class="nav-links">
+                <li><a href="index.html">首页</a></li>
+                <li><a href="memos.html">笔记</a></li>
+                <li><a href="trending.html">热门项目</a></li>
+                <li><a href="papers.html">前沿论文</a></li>
+                <li><a href="focus.html">焦点新闻</a></li>
+                <li><a href="tools.html">工具箱</a></li>
+                <li><a href="harness.html" class="active">Harness</a></li>
+                <li><a href="space.html">联系作者</a></li>
+            </ul>
+            <div class="nav-user" id="nav-user-area"></div>
+            <div class="nav-toggle"><span></span><span></span><span></span></div>
+        </nav>
+    </header>
+
+    <div class="page-wrap">
+        <div class="hs-layout">
+
+            <aside class="hs-sidebar glass-panel">
+                <div class="hs-sidebar-head">
+                    <div class="section-label">SESSIONS</div>
+                    <button type="button" class="btn btn-sm btn-primary" id="hs-new">新建</button>
+                </div>
+                <input type="text" class="input hs-search" id="hs-search" placeholder="搜索会话…">
+                <div class="hs-session-list" id="hs-session-list"></div>
+            </aside>
+
+            <main class="hs-main glass-panel">
+                <div class="hs-main-head">
+                    <div>
+                        <h1 class="hs-title" id="hs-title">Harness 工作台</h1>
+                        <div class="hs-subtitle" id="hs-subtitle">选择左侧会话，或新建一个开始</div>
+                    </div>
+                    <div class="hs-main-actions">
+                        <button type="button" class="btn btn-sm btn-danger hs-hidden" id="hs-interrupt">中断</button>
+                        <button type="button" class="btn btn-sm btn-danger" id="hs-delete">删除会话</button>
+                    </div>
+                </div>
+
+                <div class="hs-conversation" id="hs-conversation"></div>
+
+                <div class="hs-composer">
+                    <textarea class="textarea hs-input" id="hs-input" rows="2"
+                        placeholder="描述你要完成的任务，Enter 发送，Shift+Enter 换行"></textarea>
+                    <div class="hs-composer-actions">
+                        <label class="btn btn-sm" for="hs-file">附件</label>
+                        <input type="file" id="hs-file" hidden>
+                        <button type="button" class="btn btn-sm btn-primary" id="hs-send">发送</button>
+                    </div>
+                </div>
+            </main>
+
+            <aside class="hs-inspector glass-panel">
+                <div class="hs-usage" id="hs-usage"></div>
+                <div class="hs-tabs">
+                    <button type="button" class="hs-tab hs-tab-active" data-tab="events">原始事件流</button>
+                    <button type="button" class="hs-tab" data-tab="messages">模型可见消息</button>
+                    <button type="button" class="hs-tab" data-tab="plugins">插件面板</button>
+                </div>
+                <div class="hs-tab-body" id="hs-tab-body"></div>
+            </aside>
+
+        </div>
+    </div>
+
+    <div id="sprite-container"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/auth.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/ui.js"></script>
+    <script src="js/widgets/sprite-chat.js"></script>
+    <script src="js/widgets/music-player.js"></script>
+    <script src="js/pages/harness-stream.js"></script>
+    <script src="js/pages/harness-trajectory.js"></script>
+    <script src="js/pages/harness.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,73 @@
+{
+  "_comment": "Model-facing contracts for the filesystem tools. Handlers live in harness/tools/builtin/fs.py and are bound by name.",
+  "tools": [
+    {
+      "name": "read",
+      "permission": "read",
+      "description": "读取工作区内一个文本文件的内容，返回带行号的文本。路径相对于工作区根目录，不能越界。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "相对工作区根目录的文件路径，例如 notes/todo.md" },
+          "offset": { "type": "integer", "description": "起始行号（从 1 开始），默认 1" },
+          "limit": { "type": "integer", "description": "最多读取的行数，默认 400" }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "write",
+      "permission": "write",
+      "description": "把内容写入工作区内的文件，已存在则整体覆盖。会自动创建父目录。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "相对工作区根目录的文件路径" },
+          "content": { "type": "string", "description": "要写入的完整文本内容" }
+        },
+        "required": ["path", "content"]
+      }
+    },
+    {
+      "name": "edit",
+      "permission": "write",
+      "description": "在文件中把 old_string 精确替换成 new_string。old_string 必须在文件中唯一出现，否则报错；需要替换全部时把 replace_all 设为 true。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "相对工作区根目录的文件路径" },
+          "old_string": { "type": "string", "description": "要被替换的原文，必须与文件内容完全一致" },
+          "new_string": { "type": "string", "description": "替换后的新文本" },
+          "replace_all": { "type": "boolean", "description": "是否替换所有匹配，默认 false" }
+        },
+        "required": ["path", "old_string", "new_string"]
+      }
+    },
+    {
+      "name": "glob",
+      "permission": "read",
+      "description": "按通配符列出工作区里的文件，例如 **/*.py 或 docs/*.md。结果按修改时间倒序。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": { "type": "string", "description": "glob 模式，相对工作区根目录" }
+        },
+        "required": ["pattern"]
+      }
+    },
+    {
+      "name": "grep",
+      "permission": "read",
+      "description": "在工作区文件里按正则搜索，返回命中的文件、行号与该行内容。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": { "type": "string", "description": "Python 正则表达式" },
+          "path": { "type": "string", "description": "搜索范围，相对工作区的目录或文件，默认整个工作区" },
+          "glob": { "type": "string", "description": "只搜索匹配该通配符的文件，例如 *.py" }
+        },
+        "required": ["pattern"]
+      }
+    }
+  ]
+}
