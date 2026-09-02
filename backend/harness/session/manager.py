@@ -122,6 +122,30 @@ def finalize_turn(session_id: str) -> str:
     return status
 
 
+def reset_running_sessions() -> int:
+    """Settle every session left `running` by a stopped process. Returns the count.
+
+    A turn cannot outlive the worker driving it, so at startup nothing is
+    running by definition. Without this, sessions interrupted by a restart sit
+    at `running` until the liveness window expires — several minutes of a
+    spinner for something already known to be over.
+    """
+    with SessionLocal() as db:
+        stranded = list(db.scalars(
+            select(HarnessSession).where(HarnessSession.status == "running")
+        ).all())
+        for row in stranded:
+            db.expunge(row)
+
+    for row in stranded:
+        healed, _ = _turn_outcome(row.id)
+        set_status(row.id, healed or "idle")
+    if stranded:
+        logger.info("[harness] reset %d session(s) left running by a previous process",
+                    len(stranded))
+    return len(stranded)
+
+
 def is_busy(session_id: str) -> bool:
     """Whether a turn is genuinely still running, after reconciliation."""
     with SessionLocal() as db:

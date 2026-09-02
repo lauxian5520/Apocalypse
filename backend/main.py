@@ -24,6 +24,7 @@ if sys.version_info < (3, 10):
 from core.config import get_settings
 from core.errors import AppError
 from core.paths import PROJECT_ROOT
+from harness.session.manager import reset_running_sessions
 from models.migrations import init_database
 from routers import api_router
 from services.feed_service import has_cached_feeds, refresh_all, start_scheduler
@@ -43,6 +44,10 @@ async def lifespan(app: FastAPI):
 
     for directory in settings.runtime_dirs:
         os.makedirs(directory, exist_ok=True)
+
+    # No agent turn can outlive the process that drove it, so anything still
+    # marked running was cut off by the last shutdown.
+    reset_running_sessions()
 
     if not has_cached_feeds():
         logger.info("No feed data found, running initial scrape…")

@@ -100,7 +100,12 @@ invariants hold the design together:
    which implementation it got.
 2. **Everything the model sees is logged first.** `harness/session/projection.py::derive_messages()`
    is the *only* function permitted to turn the log into a request. The loop writes each event to
-   the store **before** yielding it. Keep both properties when changing the loop.
+   the store **before** yielding it. That includes the system prompt: it is snapshotted into a
+   `config/change` event whenever it differs from the last one logged, because it embeds the
+   current date and is rebuilt from `system.md` — recomputing it at read time would replay an old
+   session with a date the model never saw. `derive_messages` prefers the logged snapshot and
+   falls back to its argument only for sessions recorded before snapshots existed. Keep both
+   properties when changing the loop.
 
 `loop/agent.py` produces `SessionEvent`s and knows nothing about HTTP; SSE framing is the router's
 job. Only `user/message`, `assistant/message` and `tool/result` project into model messages —
@@ -110,8 +115,21 @@ everything else is log-only.
 Schema, permission) lives in `harness/data/tools/*.json`; Python supplies only the handler, exported
 via a `HANDLERS` dict and bound by name at load time. A contract with no matching handler raises
 the first time a `ToolRegistry` is built, rather than mid-conversation.
-Prompts, presets, the price table and the shell allowlist are likewise data files. **Adding a tool =
-edit one JSON file + add a handler; no other code changes.**
+Prompts, presets, the price table and the shell allowlist are likewise data files.
+
+**Adding a tool takes three edits**, not one — the discovery is not automatic:
+
+1. `harness/data/tools/<module>.json` — the contract. The `name` must match a key in step 2.
+2. `harness/tools/builtin/<module>.py` — the handler, exported in a `HANDLERS` dict. Take paths
+   through `ctx.workspace.resolve()` and sandbox containment applies for free.
+3. `harness/tools/registry.py` — add the module to `_HANDLER_MODULES` (only for a *new* module;
+   adding a tool to an existing one skips this), and list the tool name in the presets that
+   should offer it.
+
+**What takes effect without a restart:** prompt files (`data/prompts/*.md`) and tool
+`description` text, because `system_prompt()` and the contract loader read from disk. **What needs
+a restart:** anything behind an `@lru_cache` — `load_specs()`, `load_preset()`, the shell allowlist
+and the price table. So editing a prompt is live; adding a tool, preset or allowlist entry is not.
 
 Non-obvious behaviour learned the hard way, all commented at the relevant code:
 
@@ -120,7 +138,9 @@ Non-obvious behaviour learned the hard way, all commented at the relevant code:
   Cleanup is a Starlette `BackgroundTask`, and `manager.reconcile_status()` heals the row from the
   log as a backstop.
 - **Status is derived per turn**, not from the single last event — the loop emits `step/end` *after*
-  `tool/approval`.
+  `tool/approval`. `lifespan` also calls `reset_running_sessions()`, because no turn can outlive the
+  process that drove it, so anything still marked `running` at boot was cut off by the last
+  shutdown.
 - **Compaction triggers on the provider's real `prompt_tokens`** (from `llm/usage`), not a local
   estimate: every request also carries the system prompt and all tool schemas (~1500–2000 tokens),
   which a text-only estimate misses entirely. It refuses to summarise when the gain would be
@@ -130,8 +150,25 @@ Non-obvious behaviour learned the hard way, all commented at the relevant code:
   string when the cap is hit, because a silent `""` hid a broken feature.
 - **Streamed chunks are batched** (`CHUNK_FLUSH_SIZE` / `CHUNK_FLUSH_SECONDS`) — one commit per
   token cost roughly a fifth of a long turn's wall clock.
-- The system prompt carries the current **date only**; second precision would invalidate the
-  provider's prefix cache on every request.
+- The system prompt carries the current **date only** — second precision would invalidate the
+  provider's prefix cache on every request. Exact time comes from the `current_time` tool
+  instead, which reads the clock locally. Without it the model either refuses or tries to fetch
+  the time from a public API and fails.
+
+### What is *not* pluggable
+
+Verified absent — `skill`, `subagent`, `importlib` and `entry_point` have zero matches under
+`harness/`. Do not describe these as available:
+
+- **No skills.** There is no mechanism for injecting procedural knowledge on demand.
+- **No subagents.** Nothing spawns a nested agent; there is no `subagent` tool.
+- **No dynamic or third-party loading.** Every module is imported at process start; there is no
+  plugin directory scan, package discovery or hot-reload.
+- **Hooks are code-level.** `pre_step` and `pre_execute` are real extension points, but a listener
+  is registered by editing `build_hooks()` in `harness/context.py`.
+
+Tools and presets are the genuinely pluggable parts. The upstream project's "everything is a
+plugin" framing describes *its* design, not this one.
 
 ### Security posture — read before loosening anything
 

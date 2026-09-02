@@ -101,10 +101,28 @@ def _to_text(html: str) -> str:
 
 
 def _reason(exc: Exception) -> str:
+    """A reason a person can act on.
+
+    httpx wraps transport failures in exceptions whose `str()` is often empty,
+    so a bare `str(exc) or type(exc).__name__` produced the useless message
+    "抓取失败：ConnectError". Walk the cause chain for the OS-level detail —
+    "Connection refused", "Name or service not known" — which is the part that
+    actually says whether the host is down, the DNS is wrong or a proxy is in
+    the way.
+    """
     resp = getattr(exc, "response", None)
     if resp is not None:
         return f"HTTP {resp.status_code}"
-    return str(exc) or exc.__class__.__name__
+
+    seen = []
+    cause = exc
+    while cause is not None and len(seen) < 4:
+        text = str(cause).strip()
+        if text and text not in seen:
+            seen.append(text)
+        cause = cause.__cause__ or cause.__context__
+    detail = "；".join(seen)
+    return f"{exc.__class__.__name__}{f'（{detail}）' if detail else ''}"
 
 
 HANDLERS = {"web_fetch": web_fetch, "web_search": web_search}

@@ -29,7 +29,7 @@ from harness.llm.pricing import estimate_cost  # noqa: E402
 from harness.llm.registry import build_adapter  # noqa: E402
 from harness.sandbox.workspace import Workspace  # noqa: E402
 from harness.session import manager  # noqa: E402
-from harness.session.projection import derive_messages  # noqa: E402
+from harness.session.projection import derive_messages, logged_system_prompt  # noqa: E402
 from harness.session.sqlite_store import SqliteSessionStore  # noqa: E402
 from harness.tools.approval import ALLOW, ASK, DENY, ApprovalPolicy  # noqa: E402
 from harness.tools.registry import ToolRegistry, list_presets, load_specs  # noqa: E402
@@ -249,6 +249,15 @@ async def check_full_turn() -> str:
         if ev.AGENT_ERROR in types and ev.TOOL_RESULT not in types:
             raise RuntimeError("整轮没有成功调用任何工具")
 
+        # The system prompt must be in the log, not recomputed at read time:
+        # it embeds today's date, so replaying an old session without a
+        # snapshot would show a date the model never saw.
+        snapshot = logged_system_prompt(log)
+        if snapshot is None:
+            raise RuntimeError("日志里没有系统提示词快照，历史将无法忠实重放")
+        if derive_messages(log, "SENTINEL")[0]["content"] != snapshot:
+            raise RuntimeError("投影没有采用日志中的系统提示词快照")
+
         # Chunks must reassemble into the message they built, per step —
         # the property that makes the trajectory view a faithful replay.
         pending = []
@@ -263,10 +272,11 @@ async def check_full_turn() -> str:
         files = sorted(p.name for p in Path(hctx.workspace.root).rglob("*") if p.is_file())
         usage = manager.usage_summary(session.id)
         chunks = sum(1 for t in types if t == ev.ASSISTANT_CHUNK)
+        snapshots = sum(1 for t in types if t == ev.CONFIG_CHANGE)
         ok_tools = [n for n, ok in tools_used if ok]
         failed = [n for n, ok in tools_used if not ok]
         detail = f"成功 {ok_tools or '无'}" + (f" · 失败 {failed}" if failed else "")
-        return (f"{len(types)} 个事件（其中 {chunks} 个流式片段，可完整重放）· "
+        return (f"{len(types)} 个事件（{chunks} 个流式片段 + {snapshots} 份提示词快照，可完整重放）· "
                 f"{detail} · 文件 {files or '无'} · {usage['total_tokens']} tokens")
     finally:
         manager.delete(session.id, user_id)

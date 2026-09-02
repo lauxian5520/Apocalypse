@@ -17,7 +17,7 @@ from harness.events import SessionEvent
 from harness.loop import interrupt
 from harness.loop.hooks import PRE_EXECUTE, PRE_STEP
 from harness.session.compaction import maybe_compact
-from harness.session.projection import derive_messages
+from harness.session.projection import derive_messages, logged_system_prompt
 from harness.tools.approval import ASK, DENY
 
 logger = logging.getLogger(__name__)
@@ -150,6 +150,17 @@ async def _drive(hctx) -> AsyncIterator[SessionEvent]:
 async def _request_model(hctx):
     """Stream one model response, yielding chunk events then the LLMResult."""
     log = await maybe_compact(hctx, hctx.store.read(hctx.session_id), hctx.context_budget)
+
+    # Record the system prompt whenever it differs from the last one logged —
+    # which happens on the first request of a session, the first request of a
+    # new day (the runtime block carries the date), and after `system.md` is
+    # edited. Writing it only on change keeps the log small while making every
+    # request reconstructable, including which prompt was in force when.
+    snapshot = _snapshot_prompt(hctx, log)
+    if snapshot is not None:
+        log = log + [snapshot]
+        yield snapshot
+
     messages = derive_messages(log, hctx.system_prompt)
 
     buffer: list[tuple[str, dict]] = []
@@ -267,6 +278,13 @@ async def _execute(hctx, call: dict, spec) -> AsyncIterator[SessionEvent]:
         "is_error": is_error,
         "stops_turn": spec.stops_turn and not is_error,
     })
+
+
+def _snapshot_prompt(hctx, log: list[SessionEvent]) -> SessionEvent | None:
+    """Log the current system prompt if the log does not already end with it."""
+    if logged_system_prompt(log) == hctx.system_prompt:
+        return None
+    return hctx.emit(ev.CONFIG_CHANGE, {"system_prompt": hctx.system_prompt})
 
 
 def _pending_calls(log: list[SessionEvent]) -> list[dict]:

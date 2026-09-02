@@ -16,11 +16,30 @@ ORPHAN_RESULT = "[未完成：该工具调用被中断或取消]"
 COMPACTION_HEADER = "以下是本次会话早期内容的摘要（原始事件仍保留在日志中）：\n"
 
 
+def logged_system_prompt(log: list[SessionEvent]) -> str | None:
+    """The newest system-prompt snapshot in the log, or None if it has none.
+
+    None means a session recorded before snapshots existed; the caller's own
+    prompt is the only thing left to fall back on.
+    """
+    for e in reversed(log):
+        if e.type == ev.CONFIG_CHANGE and "system_prompt" in e.data:
+            return e.data["system_prompt"]
+    return None
+
+
 def derive_messages(log: list[SessionEvent], system_prompt: str) -> list[dict]:
-    """Fold an event log into the exact `messages` array sent to the provider."""
+    """Fold an event log into the exact `messages` array sent to the provider.
+
+    The system prompt comes from the log when one was recorded there. It has to:
+    the prompt is rebuilt from `system.md` plus a runtime block containing
+    today's date, so recomputing it would replay an old session with a date the
+    model never saw — and with whatever `system.md` says now rather than what it
+    said then. `system_prompt` is the fallback for logs predating snapshots.
+    """
     summary, covered_to = _latest_compaction(log)
 
-    system = system_prompt
+    system = logged_system_prompt(log) or system_prompt
     if summary:
         system = f"{system}\n\n{COMPACTION_HEADER}{summary}"
     messages: list[dict] = [{"role": "system", "content": system}]

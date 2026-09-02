@@ -14,7 +14,7 @@ from pathlib import Path
 from core.config import get_settings
 from core.errors import AppError, NotFoundError, ValidationError
 from harness.tools.base import PERMISSIONS, ToolContext, ToolSpec
-from harness.tools.builtin import fs, plan, shell, web
+from harness.tools.builtin import clock, fs, plan, shell, web
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ TOOLS_DIR = DATA_DIR / "tools"
 PRESETS_DIR = DATA_DIR / "presets"
 
 # Contract file -> the module supplying that file's handlers.
-_HANDLER_MODULES = {"fs": fs, "shell": shell, "web": web, "plan": plan}
+_HANDLER_MODULES = {"fs": fs, "shell": shell, "web": web, "plan": plan, "clock": clock}
 
 
 @lru_cache()

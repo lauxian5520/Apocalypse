@@ -4,5 +4,11 @@
   "description": "只保留 shell 与文件编辑，用于对照测试与基准评测。",
   "system_prompt": "minimal.md",
   "max_steps": 12,
-  "tools": ["bash", "read", "write", "edit"]
+  "tools": [
+    "bash",
+    "read",
+    "write",
+    "edit",
+    "current_time"
+  ]
 }
