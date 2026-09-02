@@ -42,9 +42,11 @@ SURFACE_TYPES = frozenset({USER_MESSAGE, ASSISTANT_MESSAGE, TOOL_RESULT})
 
 # Types a reader is allowed to skip when it does not recognise them. Anything
 # outside this set must abort reconstruction rather than silently drop context.
+# CONFIG_CHANGE is deliberately absent: it carries the system-prompt snapshot,
+# so a reader that skipped it would rebuild a request the model never saw.
 IGNORABLE_TYPES = frozenset({
     ASSISTANT_CHUNK, LLM_USAGE, STEP_START, STEP_END,
-    TURN_START, TURN_END, SESSION_START, CONFIG_CHANGE,
+    TURN_START, TURN_END, SESSION_START,
 })
 
 KNOWN_TYPES = frozenset({

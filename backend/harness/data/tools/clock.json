@@ -1,0 +1,19 @@
+{
+  "_comment": "A local clock. The system prompt carries only the date, because a second-precision timestamp there would invalidate the provider's prefix cache on every request. This tool gives exact time on demand, with no network call.",
+  "tools": [
+    {
+      "name": "current_time",
+      "permission": "read",
+      "description": "获取服务器当前的精确时间（本地时区与 UTC）。系统提示词里只有日期，需要具体时刻时用这个工具，不要联网去查。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "description": "可选的 IANA 时区名，例如 Asia/Shanghai；留空则用服务器本地时区"
+          }
+        }
+      }
+    }
+  ]
+}

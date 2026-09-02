@@ -5,9 +5,16 @@
   "system_prompt": "system.md",
   "max_steps": 24,
   "tools": [
-    "read", "write", "edit", "glob", "grep",
+    "read",
+    "write",
+    "edit",
+    "glob",
+    "grep",
     "bash",
-    "web_fetch", "web_search",
-    "todo_write", "exit_plan_mode"
+    "web_fetch",
+    "web_search",
+    "todo_write",
+    "exit_plan_mode",
+    "current_time"
   ]
 }

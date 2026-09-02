@@ -124,6 +124,7 @@ turn/end
 | `read` / `write` / `edit` / `glob` / `grep` | read / write | 文件操作，路径强制收敛在会话工作区内 |
 | `bash` | exec | 单条命令，无管道/重定向；默认关闭 |
 | `web_fetch` / `web_search` | read | 抓取网页正文 / DuckDuckGo 检索 |
+| `current_time` | read | 服务器当前精确时间，支持指定 IANA 时区，不联网 |
 | `todo_write` / `exit_plan_mode` | read | 任务清单与方案确认 |
 
 工具的**模型可见契约**（名称、描述、JSON Schema、权限位）住在 `harness/data/tools/*.json`，
@@ -167,11 +168,19 @@ sudo chown -R 10001:10001 ./var
   注意 `HARNESS_CONTEXT_BUDGET_TOKENS` 必须明显高于那个固定开销（standard 模式约 1500–2000
   token），否则压缩再多也降不下来；这种情况下系统会拒绝压缩并打一条可操作的警告，而不是
   每一步都白花一次摘要请求。
+- **时间** — 系统提示词只带**日期**（秒级时间戳会让 provider 的前缀缓存每次失效，实测缓存
+  能省下约 8000/9900 的输入 token）。需要精确时刻由 `current_time` 工具提供，本地读取不联网。
+  注意它读的是**服务器时区**——Docker 容器默认 UTC，需要本地时区就在 `docker-compose.yml`
+  的 backend 服务加 `environment: TZ: Asia/Shanghai`。
 - **思考型模型** — `deepseek-v4-pro` 这类模型会先花输出预算做推理，再吐正文。所以标题、
   摘要这类短输出的 `max_tokens` 必须留足余量（代码里已按 512 / 3000 设置）；预算给小了会
   拿到空正文，此时适配器直接报错而不是返回空串——这个坑最初就是靠这条报错才发现的。
 - **计费** — `data/pricing.json` 是数据文件；表里查不到的模型显示「—」而不是 0，
   token 数无论如何都是准确的。价格会变，请对照 [DeepSeek 官方定价](https://api-docs.deepseek.com/quick_start/pricing) 自行核对。
+- **提示词快照** — 系统提示词会随 `config/change` 事件写进日志（仅在内容变化时写，不刷日志）。
+  因为它包含当天日期、且由 `system.md` 拼出来，读取时重算会让历史会话显示模型当时没见过的
+  日期，改过 `system.md` 后更会把全部历史一起改写。投影优先用日志里的快照，没有快照的老会话
+  才回落到当前配置。顺带的好处是能看出每个会话当时跑的是哪一版提示词。
 - **fork / replay** — 从任意事件序号分支出新会话，历史与工作区一并复制。
 
 ### 验证

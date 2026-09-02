@@ -83,6 +83,7 @@ def runtime_context() -> str:
     return (
         "\n\n## 运行环境\n\n"
         f"- 当前日期：{now:%Y-%m-%d}（{now:%A}，时区 {now:%Z} UTC{now:%z}）\n"
+        "- 需要精确到时分秒时调用 `current_time` 工具，**不要联网去查时间**\n"
         "- 工作区就是你的当前目录，所有路径相对它，不要尝试访问外部路径\n"
     )
 
