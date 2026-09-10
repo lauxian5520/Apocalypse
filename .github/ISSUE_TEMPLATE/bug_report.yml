@@ -1,0 +1,67 @@
+name: Bug report
+description: 报告可复现的问题
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: 感谢反馈。请先搜索现有 Issues，并删除日志中的 API Key、Cookie 与个人数据。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 启动方式与配置（请隐藏密钥）
+        2. 打开页面
+        3. 执行操作
+        4. 观察结果
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Apocalypse 版本或 commit
+      placeholder: e922095 或 main@YYYY-MM-DD
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: 启动方式
+      options:
+        - Docker Compose
+        - 本地 Python
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: 操作系统、Python/Docker 版本、浏览器、AI Provider。
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志
+      description: 请删除密钥、Token、Cookie、URL 参数和个人内容。
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已搜索现有 Issues，且未发现重复问题。
+          required: true
+        - label: 我已从描述和日志中删除敏感信息。
+          required: true

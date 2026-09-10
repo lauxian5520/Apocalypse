@@ -1,0 +1,44 @@
+name: Feature request
+description: 提议一个有明确使用场景的改进
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 使用场景与问题
+      description: 谁在什么情况下遇到了什么问题？不要只写方案名称。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 描述最小可行改动、交互或接口。
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 考虑过的替代方案
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响范围
+      options:
+        - 笔记与知识管理
+        - Agent / Harness
+        - 数据源与抓取
+        - AI Provider
+        - 部署与运维
+        - 前端与交互
+        - 文档与示例
+        - 其他
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 参与意愿
+      options:
+        - label: 我愿意在方案确认后提交 Pull Request。
