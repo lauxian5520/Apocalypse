@@ -1,6 +1,45 @@
-# 天启 🚀
+<div align="center">
 
-> AI 驱动的个人知识空间 — 沉浸式前端 + 社交笔记 + Python 全栈后端
+<img src="docs/assets/apocalypse-hero.webp" alt="Apocalypse — 构建你的知识坐标系" width="100%" />
+
+# 天启 Apocalypse
+
+**把笔记、论文、GitHub Trending、热点与可追溯 AI Agent，收进一个可自托管的知识工作台。**
+
+[English](README_EN.md) · [快速开始](#-快速开始) · [功能全景](#-功能全景) · [参与贡献](CONTRIBUTING.md) · [报告问题](https://github.com/lauxian5520/Apocalypse/issues)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-7c3aed.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Stars](https://img.shields.io/github/stars/lauxian5520/Apocalypse?style=social)](https://github.com/lauxian5520/Apocalypse/stargazers)
+
+</div>
+
+## 为什么值得关注
+
+- **不只是聊天框**：笔记、论文、项目和热点是同一个知识流，AI 直接在页面上下文中解释与总结。
+- **Agent 全程可核对**：工具调用、审批、Token、模型可见消息和事件轨迹都能回放，不靠“黑盒魔法”。
+- **真正可自托管**：FastAPI + SQLite + 原生前端，Docker Compose 一条命令启动，运行数据集中在 `var/`。
+- **不绑定模型厂商**：支持 DeepSeek、智谱、Gemini、OpenAI、Ollama 和 OpenAI 兼容端点。
+
+> 如果 Apocalypse 对你有帮助，欢迎点一个 ⭐。它会让更多需要“个人知识空间 + 可追溯 Agent”的开发者发现这个项目。
+
+## 🧭 功能全景
+
+| 知识输入 | AI 与执行 | 沉淀与协作 |
+|---|---|---|
+| GitHub Trending、Hugging Face、arXiv、多平台热点 | 流式对话、页面总结、内容解释、工具调用 | Markdown 多图笔记、评论、私聊、附件 |
+| 每日/每周/月度聚合 | 人工审批、沙箱、轨迹检查、上下文压缩 | 本地数据库、统一备份、后台管理 |
+
+<details>
+<summary><strong>适合谁？</strong></summary>
+
+- 想把碎片化信息源收进一个可搜索、可沉淀工作流的学习者与研究者。
+- 想研究 Agent 工具调用、事件溯源、审批与沙箱实现的 AI 工程师。
+- 不愿把个人知识和 API Key 托管给第三方 SaaS 的自托管用户。
+
+</details>
 
 ## ✨ 功能特性
 
@@ -217,6 +256,17 @@ cd backend && python ../tools/harness_probe.py --prompt "在工作区建一个 h
 
 ## 🚀 快速启动
 
+### Docker Compose（推荐，约 1 分钟）
+
+```bash
+git clone https://github.com/lauxian5520/Apocalypse.git
+cd Apocalypse
+cp .env.example .env
+docker compose up -d
+```
+
+打开 <http://localhost>，注册的第一个账号会自动成为管理员。基础知识空间无需 AI Key；如需 AI 功能，编辑 `.env` 选择一个云端 Provider，或配置本地 Ollama。
+
 ### 方式一：本地开发
 
 ```bash
@@ -230,10 +280,11 @@ python main.py
 
 > 运行目录无关：所有路径都相对项目根解析，从任何目录启动都用同一份 `var/` 数据。
 
-### 方式二：Docker Compose（推荐生产部署）
+### 生产部署
 
 ```bash
 cp .env.example .env
+# 修改 JWT_SECRET、COOKIE_SECURE 与 ALLOWED_ORIGINS 后再启动
 docker compose up -d
 ```
 
