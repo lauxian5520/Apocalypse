@@ -1,0 +1,25 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Apocalypse $TAG_NAME" \
+            --generate-notes \
+            --notes "首个公开版本：自托管 AI 个人知识空间与可追溯 Agent 工作台。支持 Docker Compose、多个模型 Provider、工具审批、沙箱、事件日志、Token 计费和 fork/replay。"
