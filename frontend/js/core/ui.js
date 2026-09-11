@@ -221,20 +221,31 @@ function ensureSpriteAssistant() {
   if (window.__spriteAssistantBooted) return;
   window.__spriteAssistantBooted = true;
 
-  if (!document.querySelector('link[href$="sprite-chat.css"]')) {
+  // login/register/admin load the sprite script but not its stylesheets, so
+  // both are injected here rather than added to those pages' heads.
+  ['css/components/floating-panel.css', 'css/components/sprite-chat.css'].forEach((href) => {
+    const file = href.split('/').pop();
+    if (document.querySelector(`link[href$="${file}"]`)) return;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'css/components/sprite-chat.css';
+    link.href = href;
     document.head.appendChild(link);
-  }
+  });
   if (!document.getElementById('sprite-container')) {
     const el = document.createElement('div');
     el.id = 'sprite-container';
     document.body.appendChild(el);
   }
 
-  const chain = typeof window.THREE === 'undefined' ? loadScript(THREE_CDN) : Promise.resolve();
-  chain.then(() => loadScript('js/widgets/sprite-chat.js')).catch(() => {});
+  // floating-panel must be defined before the widgets register with it; the
+  // widgets degrade to fixed position if it never arrives, they do not throw.
+  const panels = window.FloatingPanel
+    ? Promise.resolve()
+    : loadScript('js/widgets/floating-panel.js').catch(() => {});
+  const three = typeof window.THREE === 'undefined' ? loadScript(THREE_CDN) : Promise.resolve();
+  Promise.all([panels, three])
+    .then(() => loadScript('js/widgets/sprite-chat.js'))
+    .catch(() => {});
 }
 
 // ── Boot ─────────────────────────────────────────────────────────

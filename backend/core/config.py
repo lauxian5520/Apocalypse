@@ -91,6 +91,14 @@ class Settings(BaseSettings):
     harness_workspace_quota_mb: int = 64
     harness_search_url: str = ""         # blank uses the built-in DuckDuckGo endpoint
 
+    # Subagents. Every knob here is a spend limit: a delegated run costs real
+    # tokens and nobody is watching it turn by turn.
+    harness_subagent_enabled: bool = True
+    harness_subagent_max_depth: int = 1          # a subagent may not spawn one
+    harness_subagent_max_per_session: int = 16
+    harness_subagent_max_steps: int = 8
+    harness_subagent_timeout_seconds: int = 300
+
     # ── Server ────────────────────────────────────────────────────
     host: str = "0.0.0.0"
     port: int = 8000

@@ -21,6 +21,12 @@ class ToolContext:
     session_id: str
     sandbox: Any                       # harness.sandbox.base.Sandbox
     workspace: Any                     # harness.sandbox.workspace.Workspace
+    skills: list[str] | None = None    # skills load_skill may read; None means all
+    # Write an event to *this* session's log. Only `subagent` uses it, to record
+    # a delegation in the parent's trajectory; every other handler returns text
+    # and lets the loop do the writing.
+    emit: Any = None                   # Callable[[str, dict], SessionEvent] | None
+    depth: int = 0                     # 0 for a user's session, 1 inside a subagent
 
 
 @dataclass(frozen=True)

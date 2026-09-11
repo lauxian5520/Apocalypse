@@ -21,3 +21,12 @@ python-dotenv>=1.0.0
 aiofiles>=23.2.1
 email-validator>=2.1.0
 zai-sdk==0.2.2
+
+# Document generation for Harness skills. The sandbox runs the same interpreter
+# as the server (see harness/sandbox/local.py::_child_env), so what is installed
+# here is what a skill's scripts can import.
+python-docx==1.2.0
+python-pptx==1.0.2
+# Bundles the pandoc binary, so reading .docx back does not need a system
+# package (and therefore no root on the deployment host).
+pypandoc_binary==1.17

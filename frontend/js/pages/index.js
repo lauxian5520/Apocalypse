@@ -26,22 +26,37 @@ function goTo(next) {
   setTimeout(() => { animating = false; sections.forEach(s => s.classList.remove('above')); }, 900);
 }
 
+// The floating widgets sit on top of the sections and scroll internally.
+// This page turns every wheel tick into a section change, so a wheel over
+// 天启's reply used to scroll the reply *and* flip the page behind it at the
+// same time — which is what made a long answer impossible to read.
+const OVERLAYS = '.chat-dialog, #sprite-container, #sprite-clock, #music-player';
+
 let lastWheel = 0;
 window.addEventListener('wheel', e => {
+  if (e.target instanceof Element && e.target.closest(OVERLAYS)) return;
   const now = Date.now();
   if (now - lastWheel < 900) return;
   lastWheel = now;
   goTo(e.deltaY > 0 ? cur + 1 : cur - 1);
 }, { passive: true });
 
+// Same reasoning for the other two ways in: an arrow key belongs to whatever
+// field has focus, and a swipe belongs to whatever it started on.
 window.addEventListener('keydown', e => {
+  if (e.target instanceof Element && e.target.closest(OVERLAYS)) return;
   if (e.key === 'ArrowDown' || e.key === 'PageDown') goTo(cur + 1);
   if (e.key === 'ArrowUp'   || e.key === 'PageUp')   goTo(cur - 1);
 });
 
 let touchStartY = 0;
-window.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; });
+let touchOnOverlay = false;
+window.addEventListener('touchstart', e => {
+  touchStartY = e.touches[0].clientY;
+  touchOnOverlay = e.target instanceof Element && !!e.target.closest(OVERLAYS);
+});
 window.addEventListener('touchend', e => {
+  if (touchOnOverlay) return;
   const dy = touchStartY - e.changedTouches[0].clientY;
   if (Math.abs(dy) > 50) goTo(dy > 0 ? cur + 1 : cur - 1);
 });

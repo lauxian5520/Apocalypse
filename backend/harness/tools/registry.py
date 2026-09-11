@@ -4,27 +4,82 @@ Contracts come from `harness/data/tools/*.json`; handlers come from the modules
 in `harness/tools/builtin/`. Neither half knows about the other until they are
 matched by name here, which is what lets a tool's description or schema change
 without touching Python.
+
+Discovery is contract-driven: the JSON files decide which modules exist. A
+handler module nobody wrote a contract for contributes nothing to a request, so
+the contract is the half that counts as the declaration.
 """
 import inspect
 import json
 import logging
 from functools import lru_cache
+from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 
 from core.config import get_settings
 from core.errors import AppError, NotFoundError, ValidationError
 from harness.tools.base import PERMISSIONS, ToolContext, ToolSpec
-from harness.tools.builtin import clock, fs, plan, shell, web
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 TOOLS_DIR = DATA_DIR / "tools"
+PROMPTS_DIR = DATA_DIR / "prompts"
 PRESETS_DIR = DATA_DIR / "presets"
+BUILTIN_DIR = Path(__file__).resolve().parent / "builtin"
 
-# Contract file -> the module supplying that file's handlers.
-_HANDLER_MODULES = {"fs": fs, "shell": shell, "web": web, "plan": plan, "clock": clock}
+# Modules a deployment can switch off wholesale, and the setting that decides.
+# Anything gated here disappears from every preset at once, so a preset asking
+# for it never overrides the deployment's answer.
+_MODULE_GATES = {
+    "shell": "harness_shell_enabled",
+    "subagent": "harness_subagent_enabled",
+}
+
+# Loader-internal key: where this definition's system prompt file lives.
+# Prefixed so it is never mistaken for part of the data contract.
+PROMPT_DIR_KEY = "_prompt_dir"
+
+
+def _discover() -> list[tuple[str, ModuleType]]:
+    """Every `(module_name, module)` pair the build offers, in a stable order.
+
+    Sorted deliberately. The resulting order reaches the provider as the request's
+    `tools` array, and prefix caching only pays off while that prefix is byte
+    identical — letting it follow directory order would throw the cache away on
+    a whim of the filesystem.
+    """
+    found: list[tuple[str, ModuleType]] = []
+    for path in sorted(TOOLS_DIR.glob("*.json")):
+        name = path.stem
+        if name.startswith("_"):
+            continue
+        try:
+            found.append((name, import_module(f"harness.tools.builtin.{name}")))
+        except ImportError as e:
+            raise ValidationError(
+                f"工具契约 {path.name} 没有对应实现 harness/tools/builtin/{name}.py：{e}"
+            )
+
+    _warn_about_orphan_modules({name for name, _ in found})
+    return found
+
+
+def _warn_about_orphan_modules(declared: set[str]) -> None:
+    """A handler module with no contract is dead code — say so at startup.
+
+    Silence here is the confusing case: the file is on disk, the tool never
+    appears, and nothing explains why.
+    """
+    for path in sorted(BUILTIN_DIR.glob("*.py")):
+        if path.stem.startswith("_") or path.stem in declared:
+            continue
+        logger.info(
+            "[harness] %s has no contract in data/tools/%s.json and is not loaded",
+            path.name, path.stem,
+        )
 
 
 @lru_cache()
@@ -32,7 +87,7 @@ def load_specs() -> dict[str, ToolSpec]:
     """Every tool the build knows about, bound and validated. Cached per process."""
     specs: dict[str, ToolSpec] = {}
 
-    for module_name, module in _HANDLER_MODULES.items():
+    for module_name, module in _discover():
         contract_file = TOOLS_DIR / f"{module_name}.json"
         try:
             with open(contract_file, "r", encoding="utf-8") as f:
@@ -65,14 +120,48 @@ def load_specs() -> dict[str, ToolSpec]:
     return specs
 
 
+def expand_tools(names: list, available: dict[str, ToolSpec]) -> list[str]:
+    """Resolve a definition's `tools` list, honouring `*` and `module:*`.
+
+    Order follows the definition, then discovery order inside a wildcard, so the
+    request's `tools` array stays byte-stable across restarts.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def take(name: str) -> None:
+        if name not in seen:
+            seen.add(name)
+            out.append(name)
+
+    for entry in names:
+        entry = str(entry)
+        if entry == "*":
+            for name in available:
+                take(name)
+        elif entry.endswith(":*"):
+            module = entry[:-2]
+            matched = [n for n, s in available.items() if s.module == module]
+            if not matched:
+                logger.warning("[harness] no tools found for module wildcard %r", entry)
+            for name in matched:
+                take(name)
+        else:
+            take(entry)
+
+    return out
+
+
 @lru_cache()
 def load_preset(name: str) -> dict:
     path = PRESETS_DIR / f"{name}.json"
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            preset = json.load(f)
     except (OSError, json.JSONDecodeError):
         raise NotFoundError(f"运行模式不存在：{name}")
+    preset[PROMPT_DIR_KEY] = PROMPTS_DIR
+    return preset
 
 
 def list_presets() -> list[dict]:
@@ -90,27 +179,43 @@ def list_presets() -> list[dict]:
 
 
 class ToolRegistry:
-    """The tools one session actually has, and the pipeline that runs them."""
+    """The tools one session actually has, and the pipeline that runs them.
 
-    def __init__(self, preset_name: str = ""):
-        preset = load_preset(preset_name or settings.harness_preset)
-        self.preset = preset
+    Built either from a named preset (a person picked it) or from a definition
+    dict already in hand (an agent definition, chosen by the model). Both shapes
+    carry the same keys, so there is one code path.
+    """
+
+    def __init__(self, name: str = "", *, definition: dict | None = None):
+        definition = definition if definition is not None else \
+            load_preset(name or settings.harness_preset)
+        self.definition = definition
         self.max_steps = min(
-            int(preset.get("max_steps", settings.harness_max_steps)), settings.harness_max_steps
+            int(definition.get("max_steps", settings.harness_max_steps)), settings.harness_max_steps
         )
 
         available = load_specs()
         self._specs: dict[str, ToolSpec] = {}
-        for name in preset.get("tools", []):
-            spec = available.get(name)
+        for tool_name in expand_tools(definition.get("tools", []), available):
+            spec = available.get(tool_name)
             if spec is None:
-                logger.warning("[harness] preset %r lists unknown tool %r", preset["name"], name)
+                logger.warning(
+                    "[harness] %r lists unknown tool %r", definition.get("name", "?"), tool_name
+                )
                 continue
-            # The shell is opt-in. A preset asking for it does not override the
-            # deployment's decision not to have one.
-            if spec.module == "shell" and not settings.harness_shell_enabled:
+            if _gated_off(spec.module):
                 continue
-            self._specs[name] = spec
+            self._specs[tool_name] = spec
+
+    @property
+    def name(self) -> str:
+        return self.definition.get("name", "")
+
+    @property
+    def allowed_skills(self) -> list[str] | None:
+        """Skill names this definition exposes. `None` means every skill."""
+        allowed = self.definition.get("skills")
+        return None if allowed is None else [str(s) for s in allowed]
 
     def __contains__(self, name: str) -> bool:
         return name in self._specs
@@ -130,9 +235,10 @@ class ToolRegistry:
         return [spec.describe() for spec in self._specs.values()]
 
     def system_prompt(self) -> str:
-        filename = self.preset.get("system_prompt", "system.md")
+        filename = self.definition.get("system_prompt", "system.md")
+        directory = self.definition.get(PROMPT_DIR_KEY, PROMPTS_DIR)
         try:
-            with open(DATA_DIR / "prompts" / filename, "r", encoding="utf-8") as f:
+            with open(Path(directory) / filename, "r", encoding="utf-8") as f:
                 return f.read().strip()
         except OSError as e:
             raise ValidationError(f"系统提示词无法读取（{filename}）：{e}")
@@ -157,6 +263,11 @@ class ToolRegistry:
         except Exception as e:
             logger.exception("[harness] tool %s failed", name)
             return f"错误：{name} 执行失败（{e.__class__.__name__}: {e}）", True
+
+
+def _gated_off(module: str) -> bool:
+    setting = _MODULE_GATES.get(module)
+    return setting is not None and not getattr(settings, setting)
 
 
 def parse_arguments(raw: str) -> dict:

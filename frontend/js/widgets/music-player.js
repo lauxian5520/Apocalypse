@@ -170,7 +170,31 @@
         }
     }
 
+    /** Drag to move, corner to scale. The player sits over the top-right of
+     *  every page and used to cover whatever was underneath it.
+     *
+     *  Scaling is one font-size: music-player.css sizes the buttons in `em`,
+     *  so the pill and its three circles grow together. The drag threshold in
+     *  floating-panel.js is what keeps the buttons clickable — a press that
+     *  never travels 4px is still a click. */
+    function makeDraggable() {
+        if (!window.FloatingPanel) return;
+        const baseWidth = player.getBoundingClientRect().width || 132;
+        window.FloatingPanel.make(player, {
+            id: 'music',
+            autoHeight: true,
+            minWidth: 88,
+            maxWidth: 340,
+            onResize: (w) => {
+                player.style.fontSize = `${(w / baseWidth).toFixed(3)}rem`;
+            },
+        });
+    }
+
     bindAutoplayUnlock();
     window.addEventListener('beforeunload', () => saveState(true));
-    document.addEventListener('DOMContentLoaded', fetchTracks);
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchTracks();
+        makeDraggable();
+    });
 })();

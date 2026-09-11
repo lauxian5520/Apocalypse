@@ -21,6 +21,10 @@ _ADDED_COLUMNS: dict[str, dict[str, str]] = {
     "users": {
         "is_disabled": "BOOLEAN DEFAULT 0 NOT NULL",
     },
+    "harness_sessions": {
+        "parent_id": "VARCHAR(32)",
+        "agent": "VARCHAR(40) DEFAULT '' NOT NULL",
+    },
     "comments": {
         "image_url": "VARCHAR(500)",
     },

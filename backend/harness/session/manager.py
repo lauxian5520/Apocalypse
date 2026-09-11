@@ -170,6 +170,58 @@ def create(user_id: int, preset: str, title: str = "") -> HarnessSession:
     return row
 
 
+def create_subagent(parent_id: str, agent: str, task: str) -> HarnessSession:
+    """A child session for one delegated run.
+
+    No workspace is created: a subagent shares its parent's directory, because a
+    task like "fix these three files" is meaningless against an empty one.
+    """
+    with SessionLocal() as db:
+        parent = db.get(HarnessSession, parent_id)
+        if parent is None:
+            raise NotFoundError("父会话不存在")
+        session_id = uuid.uuid4().hex
+        row = HarnessSession(
+            id=session_id,
+            user_id=parent.user_id,
+            preset=parent.preset,
+            title=f"[{agent}] {task}"[:200],
+            parent_id=parent_id,
+            agent=agent,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        db.expunge(row)
+
+    SqliteSessionStore().append(
+        session_id, ev.SESSION_START, {"agent": agent, "parent_id": parent_id}
+    )
+    return row
+
+
+def count_children(session_id: str) -> int:
+    with SessionLocal() as db:
+        return db.scalar(
+            select(func.count()).select_from(HarnessSession)
+            .where(HarnessSession.parent_id == session_id)
+        ) or 0
+
+
+def child_sessions(session_id: str, user_id: int) -> list[HarnessSession]:
+    """Subagent runs dispatched by this session, oldest first."""
+    get_owned(session_id, user_id)
+    with SessionLocal() as db:
+        rows = db.scalars(
+            select(HarnessSession)
+            .where(HarnessSession.parent_id == session_id)
+            .order_by(HarnessSession.created_at)
+        ).all()
+        for row in rows:
+            db.expunge(row)
+    return [reconcile_status(row) for row in rows]
+
+
 def get_owned(session_id: str, user_id: int) -> HarnessSession:
     """The session, or an error. Ownership is checked here so routers cannot forget."""
     with SessionLocal() as db:
@@ -188,7 +240,12 @@ def list_for_user(user_id: int, query: str = "", page: int = 1, page_size: int =
     page_size = min(page_size or DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
 
     with SessionLocal() as db:
-        stmt = select(HarnessSession).where(HarnessSession.user_id == user_id)
+        # Subagent runs are reachable from their parent's trajectory, not from
+        # the sidebar — a single delegating turn could otherwise bury a day of
+        # real sessions.
+        stmt = select(HarnessSession).where(
+            HarnessSession.user_id == user_id, HarnessSession.parent_id.is_(None)
+        )
         if query.strip():
             like = f"%{query.strip()}%"
             # Search titles and what the user actually typed. Assistant text and
@@ -218,6 +275,10 @@ def list_for_user(user_id: int, query: str = "", page: int = 1, page_size: int =
 def delete(session_id: str, user_id: int) -> None:
     get_owned(session_id, user_id)
     with SessionLocal() as db:
+        for child in db.scalars(
+            select(HarnessSession).where(HarnessSession.parent_id == session_id)
+        ).all():
+            db.delete(child)      # shares the parent's workspace, so nothing on disk
         row = db.get(HarnessSession, session_id)
         if row is not None:
             db.delete(row)        # events cascade
@@ -285,9 +346,22 @@ def touch(session_id: str) -> None:
 
 
 def usage_summary(session_id: str) -> dict:
-    """Token and cost totals rolled up from the session's `llm/usage` events."""
-    events = SqliteSessionStore().read(session_id)
-    return pricing.summarize([e.data for e in events if e.type == ev.LLM_USAGE])
+    """Token and cost totals for a session *and every subagent it dispatched*.
+
+    Children are included because their tokens are billed the same as anyone
+    else's: a readout that quietly omitted them would understate a delegating
+    session by most of its actual cost.
+    """
+    store = SqliteSessionStore()
+    with SessionLocal() as db:
+        child_ids = list(db.scalars(
+            select(HarnessSession.id).where(HarnessSession.parent_id == session_id)
+        ).all())
+
+    usage = []
+    for sid in [session_id] + child_ids:
+        usage.extend(e.data for e in store.read(sid) if e.type == ev.LLM_USAGE)
+    return pricing.summarize(usage)
 
 
 def _update(session_id: str, **fields) -> None:

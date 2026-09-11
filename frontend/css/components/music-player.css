@@ -1,5 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════
    music-player.css — Global floating music player
+
+   Sized entirely in `em` off the one font-size on #music-player, so the
+   resize handle can scale the whole control by writing a single value.
 ═══════════════════════════════════════════════════════════════ */
 
 #music-player {
@@ -7,25 +10,32 @@
     top: 88px;
     right: 18px;
     z-index: 1200;
+    /* The scaling anchor. Everything below is relative to it. */
+    font-size: 1rem;
     display: flex;
     align-items: center;
-    gap: 0.45rem;
-    padding: 0.35rem 0.45rem;
+    justify-content: center;
+    gap: 0.45em;
+    padding: 0.35em 0.45em;
     border-radius: 999px;
     background: rgba(8, 8, 20, 0.55);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(108, 99, 255, 0.22);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+    cursor: grab;
 }
 
 .mp-circle {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.14);
     color: var(--text-1);
-    font-size: 0.78rem;
-    width: 30px;
-    height: 30px;
+    /* 0.78em of a 16px root = 12.48px, and 2.4em of that = 30px — the size
+       this control has always been. */
+    font-size: 0.78em;
+    width: 2.4em;
+    height: 2.4em;
+    flex: none;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -41,8 +51,8 @@
 }
 
 .mp-circle-main {
-    width: 34px;
-    height: 34px;
+    width: 2.72em;
+    height: 2.72em;
     background: linear-gradient(135deg, var(--accent), #7c74ff);
     border-color: transparent;
     box-shadow: 0 0 12px rgba(108, 99, 255, 0.35);
@@ -52,18 +62,7 @@
     #music-player {
         top: 78px;
         right: 10px;
-        gap: 0.35rem;
-        padding: 0.3rem 0.35rem;
-    }
-
-    .mp-circle {
-        width: 28px;
-        height: 28px;
-        font-size: 0.72rem;
-    }
-
-    .mp-circle-main {
-        width: 31px;
-        height: 31px;
+        /* One knob instead of restating every dimension. */
+        font-size: 0.92rem;
     }
 }

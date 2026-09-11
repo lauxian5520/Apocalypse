@@ -45,7 +45,7 @@
 ## ✨ 功能特性
 
 - **📝 社交笔记** — 发帖（Markdown + 多图）、评论、匿名发布、AI 解释
-- **🤖 AI 助手** — 3D 精灵对话（SSE 流式）、页面总结、内容解释（DeepSeek / 智谱 / Gemini / OpenAI / Ollama / 自定义）
+- **🤖 AI 助手「天启」** — 3D 精灵对话（SSE 流式）、页面总结、内容解释（DeepSeek / 智谱 / Gemini / OpenAI / Ollama / 自定义）
 - **🧩 Harness 智能体工作台** — 会话式 Agent：工具调用、人工审批、沙箱工作区、全链路事件日志、轨迹检查器、Token 计费、上下文压缩、会话 fork/replay（详见下方专节）
 - **⚡ 热门项目** — GitHub Trending + HuggingFace 模型（每日/每周/每月）
 - **📄 前沿论文** — HuggingFace Daily Papers + arXiv
@@ -86,15 +86,18 @@ Apocalypse/
 │   ├── routers/              # HTTP 层：解析请求 → 调 service → 返回 schema
 │   │   └── __init__.py       #   api_router：URL 映射的唯一定义处
 │   ├── scrapers/             # 外部数据采集（纯抓取，不关心存储）
+│   ├── data/prompts/         #   ⭐ 纯数据：精灵「天启」的人格提示词
 │   └── harness/              # 智能体子系统：与 services 同层，内部不出现 fastapi
 │       ├── context.py        #   装配点：所有接缝在这里选定实现
 │       ├── events.py         #   事件信封与类型常量
 │       ├── loop/             #   turn/step 状态机、钩子总线、中断令牌
 │       ├── session/          #   存储接缝、消息投影、压缩、标题、会话管理
 │       ├── llm/              #   模型适配器接缝（工具调用流式拼装）+ 计费
-│       ├── tools/            #   工具注册表、审批策略、内置工具实现
+│       ├── tools/            #   工具注册表（按契约扫描发现）、审批策略、内置工具实现
+│       ├── skills/           #   技能索引：目录清单 + 按需读取正文
+│       ├── agents/           #   子代理角色定义的加载与清单
 │       ├── sandbox/          #   工作区路径收敛 + 受限子进程执行
-│       └── data/             #   ⭐ 纯数据：提示词、工具契约、预设、价格表、白名单
+│       └── data/             #   ⭐ 纯数据：提示词、工具契约、预设、技能、角色、价格表、白名单
 │
 ├── frontend/                 # 前端代码（只读）
 │   ├── *.html                # 页面骨架，不含内联 JS/CSS
@@ -104,7 +107,7 @@ Apocalypse/
 │   │   └── pages/            #   每页专属样式
 │   └── js/
 │       ├── core/             #   utils → auth → api → ui（按此顺序加载）
-│       ├── widgets/          #   sprite-chat、music-player
+│       ├── widgets/          #   floating-panel（拖动/缩放）、sprite-chat、music-player
 │       └── pages/            #   每页专属逻辑
 │
 ├── var/                      # ⚠️ 运行时数据（唯一可变目录，整体备份即可）
@@ -166,11 +169,115 @@ turn/end
 | `web_fetch` / `web_search` | read | 抓取网页正文 / DuckDuckGo 检索 |
 | `current_time` | read | 服务器当前精确时间，支持指定 IANA 时区，不联网 |
 | `todo_write` / `exit_plan_mode` | read | 任务清单与方案确认 |
+| `load_skill` | read | 按需读取一份技能的流程正文，见下 |
+| `subagent` | write | 把子任务派给独立的子代理，见下 |
 
 工具的**模型可见契约**（名称、描述、JSON Schema、权限位）住在 `harness/data/tools/*.json`，
 Python 里只有 handler，注册时按名字绑定。改一句工具描述不需要动代码。
 同理，提示词在 `data/prompts/*.md`，运行模式在 `data/presets/*.json`，价格表在 `data/pricing.json`，
 shell 白名单在 `data/shell_allowlist.json`。
+
+**加一个工具 = 丢两个文件进去**：契约 `data/tools/<模块>.json` + 实现
+`tools/builtin/<模块>.py`（导出一个 `HANDLERS` 字典）。注册表按契约文件扫描目录，
+没有任何写死的清单；`standard` 模式的工具列表是 `["*"]`，所以新工具重启后自动可用
+（`minimal` 保持显式清单，它的用途是可复现的对照基准）。契约有了、实现没有，
+启动时就报错，不会等到对话中途。
+
+### 技能（Skills）
+
+流程性知识放在 `harness/data/skills/*.md`，一个文件一个技能，开头是极简 frontmatter：
+
+```markdown
+---
+description: 一句话说明这份流程是干什么的
+keywords: 逗号, 分隔, 可选
+---
+
+正文……
+```
+
+技能名就是文件名。**系统提示词里只有名字和这一句 description**，模型判断相关时自己调
+`load_skill` 把正文读进来——正文因此以普通 `tool/result` 落进事件日志，重放时一字不差，
+不会出现「模型看到了但日志里没有」的东西。这也是没有做关键词自动注入的原因。
+
+技能**不带缓存，改完下一轮就生效，不用重启**。坏掉的文件（缺 description、frontmatter
+没闭合）只会被跳过并在插件面板里标红，不会拖垮会话。
+
+### 产出文件与下载
+
+Agent 写出来的东西都在会话工作区里，右栏「文件」页签可以逐个下载，或一次打包成 zip。
+技能装入的脚本会单独分组，不和你的产出混在一起。
+
+| 想要的东西 | 怎么来 |
+|---|---|
+| `.md` / `.py` / `.tex` / `.csv` / `.json` | `write` 工具直接写，无需审批 |
+| `.docx` | `docx` 技能：Markdown → Word，支持富文本、表格、图片、目录、页码、分页 |
+| `.pptx` | `pptx` 技能：Markdown 大纲 → 幻灯片，支持要点、表格、**原生图表**、图片、分节 |
+| 读回已有的 docx / pptx | `read_docx.py`（pandoc）/ `read_pptx.py`，二进制文件 `read` 看不了 |
+| 幻灯片预览图 | `thumbnail.py`（LibreOffice），每页一张 PNG，同时验证文件真能被 Office 打开 |
+| 上传给 Agent 的附件 | 「附件」按钮，直接落进工作区，`read` / `glob` 就能看见 |
+
+> **为什么要读回**：`.docx` / `.pptx` 是 ZIP 装 XML，Agent 写完没法用 `read` 检查。
+> 两个技能的 SKILL.md 都要求生成后必须读回核对再回话——否则「已生成」只是它的一厢情愿。
+
+### 技能包（带脚本的技能）
+
+技能有两种形态：
+
+```
+data/skills/web-research.md          ← 纯流程文档
+data/skills/pptx/                    ← 技能包
+  SKILL.md                           #   入口，格式同上
+  scripts/build_deck.py              #   附带脚本
+  references/                        #   参考资料（可选）
+```
+
+调用 `load_skill` 时，**技能包的附带文件会被复制进当前会话工作区的 `.skills/<名字>/`**，
+之后就能用 `bash("python3 .skills/pptx/scripts/build_deck.py …")` 运行。
+这样做是因为沙箱只允许访问工作区内的路径——把文件搬进去，比给沙箱开口子安全得多。
+
+> **关于 Anthropic 官方 skills**：`anthropics/skills` 仓库里的 docx/pptx 虽然公开可读，
+> 但带的是**专有许可**（`LICENSE.txt` 明确禁止「在 Services 之外保留副本」「复制」「制作衍生作品」），
+> 不能装进自建服务器。本项目这两个技能是独立实现的，依赖的 `python-docx` / `python-pptx` /
+> `pandoc` 本身都是开源的。装任何第三方技能包前先看它的 LICENSE。
+
+> **装第三方技能包**：把整个目录放进 `backend/harness/data/skills/` 即可，
+> 目录名就是技能名，入口必须叫 `SKILL.md`。技能不带缓存，**放进去下一轮就生效，不用重启**。
+> 装完在右栏「插件面板」里能看到它，带「包」标记并列出附带文件；
+> 解析失败的会在那里标红，不会静默消失。
+
+**脚本执行需要 shell**：`HARNESS_SHELL_ENABLED=true`，且 `python3` **不在**自动放行白名单里，
+所以每次跑脚本都会停下来等你批准。这是唯一真正的闸门——沙箱能拦路径越界、CPU、内存、超时，
+**但拦不住网络**，脚本可以从你的服务器往外发请求。想免审批就把 `python3` 加进
+`data/shell_allowlist.json` 的 `auto_approved`，但你就失去了这道人工确认。
+
+沙箱里的 `python3` 是**跑这个服务的同一个解释器**（见 `harness/sandbox/local.py::_child_env`），
+所以服务端 `pip install` 的库，技能脚本就能 import。
+
+### 子代理（Subagents）
+
+角色定义在 `harness/data/agents/<名字>.json` + 同目录的提示词 `.md`，形状和运行模式一样。
+内置 `researcher`（只读查证）和 `coder`（读写工作区，无 shell）。
+主 Agent 调 `subagent(task, agent)` 派活，**只有子代理的最终结论回到主上下文**，
+中间几十步留在子会话自己的日志里，可以从轨迹里点进去看完整过程。
+
+子代理与父会话**共用同一个工作区**，所以「把这三个文件改一遍」这类任务能直接落地。
+它不出现在侧栏，但费用会并进父会话的读数——实测一次派发里子代理花掉的 token 比主 Agent 还多，
+分开算就会严重低估。
+
+四道花钱的闸门，都在真正发起之前：
+
+| 闸门 | 默认 | 说明 |
+|---|---|---|
+| `HARNESS_SUBAGENT_MAX_DEPTH` | `1` | 子代理不能再派子代理；任何角色的工具清单里都没有 `subagent` |
+| `HARNESS_SUBAGENT_MAX_PER_SESSION` | `16` | 按会话累计，重启后依然准确 |
+| `HARNESS_SUBAGENT_MAX_STEPS` | `8` | 单次子运行的步数上限 |
+| `HARNESS_SUBAGENT_TIMEOUT_SECONDS` | `300` | 墙钟上限，逐事件检查 |
+
+中断父会话会**连带停下正在跑的子代理**。子代理内部的审批策略是严格版：
+凡是本该转人工审批的调用一律直接拒绝，理由交给子模型让它换路子——
+因为主轮次正阻塞在这次调用上，子会话弹出的审批卡片没有人能点。安全边界没有放松，
+原本要人批的照样跑不了。
 
 ### 🛡 安全模型（部署前请读完）
 
@@ -186,6 +293,7 @@ shell 白名单在 `data/shell_allowlist.json`。
 | 文件边界 | 每个会话独占 `var/harness/workspaces/{id}/`，所有路径过 `contained_path()`（与图片上传共用同一份检查），`..`、绝对路径、指向外部的软链接全部拒绝 |
 | 资源边界 | CPU / 地址空间 / 文件大小 `setrlimit`，墙钟超时后杀整个进程组，输出截断，工作区容量配额 |
 | 容器边界 | `cap_drop: [ALL]`、`no-new-privileges`、`pids_limit`、以非 root 用户（uid 10001）运行 |
+| 派发边界 | 子代理不能再派子代理；层数、次数、步数、墙钟四重上限；子代理内「需审批」= 直接拒绝，因为没人能批 |
 
 > `RLIMIT_NPROC` 是**故意没设**的：它按真实 UID 统计，设低了会先饿死 Web 服务自己的 worker。
 > fork 炸弹由超时 + 进程组 kill + `pids_limit` 兜底。
@@ -308,6 +416,11 @@ docker compose up -d
 | `HARNESS_PRESET` | 运行模式 | `standard \| minimal` |
 | `HARNESS_MODEL` | Harness 专用模型，留空跟随 provider | 空 |
 | `HARNESS_WORKSPACE_QUOTA_MB` | 每个会话工作区容量上限 | `64` |
+| `HARNESS_SUBAGENT_ENABLED` | 是否提供 `subagent` 工具 | `true` |
+| `HARNESS_SUBAGENT_MAX_DEPTH` | 派发层数上限（子代理不能再派） | `1` |
+| `HARNESS_SUBAGENT_MAX_PER_SESSION` | 每个会话最多派发几次 | `16` |
+| `HARNESS_SUBAGENT_MAX_STEPS` | 单次子运行的步数上限 | `8` |
+| `HARNESS_SUBAGENT_TIMEOUT_SECONDS` | 单次子运行的墙钟上限 | `300` |
 
 ### 接入其他模型
 

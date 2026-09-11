@@ -1,0 +1,7 @@
+{
+  "label": "工程员",
+  "description": "在工作区里读写文件、批量修改与检查，不含 shell。适合「把这几个文件按同一规则改一遍」这类步骤多、结论短的活。",
+  "system_prompt": "coder.md",
+  "max_steps": 8,
+  "tools": ["read", "write", "edit", "glob", "grep", "load_skill", "current_time"]
+}
