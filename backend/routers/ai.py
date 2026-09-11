@@ -29,6 +29,12 @@ async def chat_stream(body: ChatIn, _: User = Depends(require_user)):
         raise ValidationError("消息不能为空")
     messages = messages[-MAX_HISTORY_MESSAGES:]
 
+    # Prepended *after* the trim, never before: the persona is not part of the
+    # conversation's budget, and a long chat must not be able to push it out.
+    persona = ai_service.sprite_system_prompt()
+    if persona:
+        messages = [{"role": "system", "content": persona}] + messages
+
     async def event_generator():
         try:
             async for chunk in ai_service.chat_stream(messages):

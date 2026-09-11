@@ -71,3 +71,20 @@ class ApprovalPolicy:
         if program in allowed:
             return Decision(ALLOW)
         return Decision(ASK, f"命令 {program} 不在自动放行白名单中，需要人工批准")
+
+
+class StrictApprovalPolicy(ApprovalPolicy):
+    """The policy inside a subagent, where `ask` has no one to ask.
+
+    A child runs while the parent's turn is blocked on the tool call that
+    started it, so an approval card raised down there could never be answered —
+    the session would simply hang. Turning `ask` into `deny` keeps the security
+    boundary exactly where it was (nothing auto-runs that would not have) and
+    hands the reason to the child model so it can try another way.
+    """
+
+    def decide(self, spec: ToolSpec, args: dict) -> Decision:
+        decision = super().decide(spec, args)
+        if decision.verdict == ASK:
+            return Decision(DENY, f"{decision.reason}——但子代理无法请求人工批准，请改用别的办法")
+        return decision

@@ -1,0 +1,83 @@
+/* ═══════════════════════════════════════════════════════════════
+   floating-panel.css — grips and resize handles for the overlay widgets.
+
+   Paired with js/widgets/floating-panel.js. Everything here is additive:
+   a widget keeps its own look and only gains a corner handle.
+═══════════════════════════════════════════════════════════════ */
+
+.fp-grip {
+    /* A drag must not select the text it passes over, and on touch it must
+       not be read as a scroll gesture. */
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.fp-dragging {
+    /* Whatever is being moved has to be visible over everything else, or the
+       user loses track of it behind a panel they are trying to get past. */
+    z-index: 4000 !important;
+    cursor: grabbing !important;
+    transition: none !important;
+}
+
+/* While a drag is in flight, nothing else on the page should react to the
+   pointer sweeping across it. */
+body.fp-drag-active {
+    cursor: grabbing;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+body.fp-drag-active iframe {
+    pointer-events: none;
+}
+
+/* ── resize handle ─────────────────────────────────────────────── */
+.fp-resize {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 16px;
+    height: 16px;
+    z-index: 2;
+    cursor: nwse-resize;
+    border-radius: 0 0 10px 0;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+    touch-action: none;
+    /* The corner chevron, drawn rather than shipped as an asset. */
+    background:
+        linear-gradient(135deg, transparent 48%, rgba(160, 176, 255, 0.85) 50%, transparent 52%),
+        linear-gradient(135deg, transparent 68%, rgba(160, 176, 255, 0.6) 70%, transparent 72%);
+    pointer-events: auto;
+}
+
+/* Hidden until the widget is hovered: these sit on top of the page all the
+   time, and a permanent handle on each is three pieces of clutter. */
+.fp-grip:hover > .fp-resize,
+.fp-resize:hover,
+.fp-resizing > .fp-resize,
+.fp-dragging > .fp-resize {
+    opacity: 1;
+}
+
+.fp-resize:hover {
+    background:
+        linear-gradient(135deg, transparent 46%, rgba(200, 212, 255, 1) 50%, transparent 54%),
+        linear-gradient(135deg, transparent 66%, rgba(200, 212, 255, 0.9) 70%, transparent 74%);
+}
+
+.fp-resizing {
+    transition: none !important;
+    user-select: none;
+}
+
+/* Touch pointers are coarse; a 16px target is not reachable. */
+@media (pointer: coarse) {
+    .fp-resize {
+        width: 26px;
+        height: 26px;
+        opacity: 0.55;
+    }
+}

@@ -15,6 +15,7 @@ import os
 import resource
 import shlex
 import signal
+import sys
 
 from core.config import get_settings
 from core.errors import ValidationError
@@ -134,8 +135,21 @@ def _child_env(cwd: str) -> dict:
     """A minimal environment — the parent's secrets do not travel downward."""
     env = {k: os.environ[k] for k in _SAFE_ENV_KEYS if k in os.environ}
     env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+
+    # Put the interpreter running this server first on PATH, so `python3` in a
+    # command means *this* Python and not whichever one the host happens to
+    # ship. Otherwise a deployment installs python-pptx into its own
+    # environment and the agent, running /usr/bin/python3, cannot import it —
+    # a failure whose cause is invisible from the error message.
+    interpreter_dir = os.path.dirname(sys.executable)
+    if interpreter_dir:
+        env["PATH"] = interpreter_dir + os.pathsep + env["PATH"]
+
     env["HOME"] = cwd
     env["PWD"] = cwd
+    # Keep __pycache__ out of the workspace; it is noise in the file list and
+    # counts against the quota.
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     return env
 
 

@@ -3,19 +3,22 @@
 The HTTP layer only frames what the agent loop produces. Turn logic lives in
 `harness/loop/agent.py`, which has no idea this file exists.
 """
+import io
 import logging
 import os
+import zipfile
 from typing import AsyncIterator
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 
 from core.config import get_settings
 from core.deps import require_user
-from core.errors import AppError, ValidationError
+from core.errors import AppError, NotFoundError, ValidationError
 from core.sse import SSE_DONE, SSE_HEADERS, sse
-from harness import build_context, resume_turn, run_turn
+from harness import agents, build_context, resume_turn, run_turn, skills
 from harness.context import build_hooks
 from harness.llm.registry import build_adapter
 from harness.loop import interrupt
@@ -28,8 +31,9 @@ from harness.tools.registry import ToolRegistry, list_presets
 from models.user import User
 from schemas.common import Page
 from schemas.harness import (
-    ApprovalIn, AttachmentOut, EventOut, MessageIn, PresetOut, RegistryOut,
-    SessionCreateIn, SessionDetailOut, SessionOut,
+    AgentOut, ApprovalIn, AttachmentOut, ChildSessionOut, EventOut, MessageIn,
+    PresetOut, RegistryOut, SessionCreateIn, SessionDetailOut, SessionOut, SkillsOut,
+    WorkspaceFileOut,
 )
 from services import storage_service
 
@@ -77,8 +81,8 @@ def get_session(session_id: str, user: User = Depends(require_harness_user)):
     row = manager.get_owned(session_id, user.id)
     return SessionDetailOut(
         **{c: getattr(row, c) for c in (
-            "id", "title", "preset", "status", "forked_from", "forked_at_seq",
-            "created_at", "updated_at")},
+            "id", "title", "preset", "status", "parent_id", "agent",
+            "forked_from", "forked_at_seq", "created_at", "updated_at")},
         usage=manager.usage_summary(session_id),
         workspace_files=_workspace_files(session_id),
     )
@@ -108,6 +112,20 @@ def read_events(
 ):
     manager.get_owned(session_id, user.id)
     return [e.to_dict() for e in SqliteSessionStore().read(session_id, after_seq=after)]
+
+
+@router.get("/sessions/{session_id}/children", response_model=list[ChildSessionOut])
+def read_children(session_id: str, user: User = Depends(require_harness_user)):
+    """Subagent runs this session dispatched — where a `subagent/*` event links to."""
+    return [
+        ChildSessionOut(
+            **{c: getattr(row, c) for c in (
+                "id", "title", "preset", "status", "parent_id", "agent",
+                "forked_from", "forked_at_seq", "created_at", "updated_at")},
+            usage=manager.usage_summary(row.id),
+        )
+        for row in manager.child_sessions(session_id, user.id)
+    ]
 
 
 @router.get("/sessions/{session_id}/messages/derived")
@@ -227,6 +245,106 @@ async def upload_attachment(
     return AttachmentOut(filename=workspace.relative(target), size_bytes=len(data))
 
 
+# ── files the agent produced ─────────────────────────────────────
+
+@router.get("/sessions/{session_id}/files", response_model=list[WorkspaceFileOut])
+def list_files(session_id: str, user: User = Depends(require_harness_user)):
+    """Everything in the workspace, newest first — the download list."""
+    manager.get_owned(session_id, user.id)
+    workspace = Workspace(session_id)
+    root = workspace.ensure()
+
+    rows: list[WorkspaceFileOut] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Skip build noise, but keep .skills: an unpacked package is worth
+        # showing so it is obvious where a script came from.
+        dirnames[:] = [d for d in dirnames
+                       if d == skills.INSTALL_DIR or not d.startswith(".")]
+        dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+        for name in filenames:
+            full = os.path.join(dirpath, name)
+            try:
+                stat = os.stat(full)
+            except OSError:
+                continue
+            rel = workspace.relative(full)
+            rows.append(WorkspaceFileOut(
+                path=rel,
+                size_bytes=stat.st_size,
+                modified_at=int(stat.st_mtime * 1000),
+                is_skill_asset=rel.startswith(skills.INSTALL_DIR + "/"),
+            ))
+            if len(rows) >= MAX_WORKSPACE_LISTING:
+                break
+    rows.sort(key=lambda r: r.modified_at, reverse=True)
+    return rows
+
+
+@router.get("/sessions/{session_id}/files/{path:path}")
+def download_file(session_id: str, path: str, user: User = Depends(require_harness_user)):
+    """One file, as a download.
+
+    The path goes through `Workspace.resolve()` like every tool call does, so
+    `..`, absolute paths and symlinks out are rejected by the same check that
+    guards the agent — one implementation, not a second one to keep in sync.
+    """
+    manager.get_owned(session_id, user.id)
+    target = Workspace(session_id).resolve(path)
+    if not os.path.isfile(target):
+        raise NotFoundError(f"文件不存在：{path}")
+
+    name = os.path.basename(target)
+    return FileResponse(
+        target,
+        media_type="application/octet-stream",
+        headers={
+            # RFC 5987: a CJK or spaced filename survives the trip intact.
+            "Content-Disposition":
+                f"attachment; filename=\"{_ascii_fallback(name)}\"; "
+                f"filename*=UTF-8\'\'{quote(name)}",
+        },
+    )
+
+
+@router.get("/sessions/{session_id}/archive")
+def download_archive(session_id: str, user: User = Depends(require_harness_user)):
+    """The whole workspace as a zip — the "give me everything" button."""
+    row = manager.get_owned(session_id, user.id)
+    workspace = Workspace(session_id)
+    root = workspace.ensure()
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+            for name in filenames:
+                full = os.path.join(dirpath, name)
+                try:
+                    archive.write(full, workspace.relative(full))
+                except OSError:
+                    continue      # a file that vanished mid-walk is not fatal
+    data = buffer.getvalue()
+
+    stem = (row.title or "harness").strip()[:60] or "harness"
+    filename = f"{stem}-{session_id[:8]}.zip"
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition":
+                f"attachment; filename=\"harness-{session_id[:8]}.zip\"; "
+                f"filename*=UTF-8\'\'{quote(filename)}",
+            "Content-Length": str(len(data)),
+        },
+    )
+
+
+def _ascii_fallback(name: str) -> str:
+    """A plain-ASCII stand-in for clients that ignore `filename*`."""
+    cleaned = "".join(c if c.isascii() and c not in '"\\' else "_" for c in name)
+    return cleaned or "download"
+
+
 # ── registry ─────────────────────────────────────────────────────
 
 @router.get("/tools", response_model=RegistryOut)
@@ -234,12 +352,30 @@ def read_registry(preset: str = "", user: User = Depends(require_harness_user)):
     """What is loaded right now — the plugin panel's data source."""
     registry = ToolRegistry(preset or settings.harness_preset)
     return RegistryOut(
-        preset=registry.preset["name"],
+        preset=registry.name,
         model=build_adapter().model,
         shell_enabled=settings.harness_shell_enabled,
+        subagent_enabled=settings.harness_subagent_enabled,
         tools=registry.describe(),
         hooks=build_hooks().describe(),
+        skills=[s.describe() for s in skills.list_skills(registry.allowed_skills)],
+        agents=agents.list_agents() if "subagent" in registry else [],
     )
+
+
+@router.get("/skills", response_model=SkillsOut)
+def read_skills(preset: str = "", _: User = Depends(require_harness_user)):
+    """Skills a session may load, plus any file that failed to parse."""
+    registry = ToolRegistry(preset or settings.harness_preset)
+    return SkillsOut(
+        skills=[s.describe() for s in skills.list_skills(registry.allowed_skills)],
+        problems=skills.problems(),
+    )
+
+
+@router.get("/agents", response_model=list[AgentOut])
+def read_agents(_: User = Depends(require_harness_user)):
+    return agents.list_agents()
 
 
 @router.get("/presets", response_model=list[PresetOut])

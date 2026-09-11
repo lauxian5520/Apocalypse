@@ -31,6 +31,11 @@ TOOL_RESULT = "tool/result"
 LLM_USAGE = "llm/usage"
 COMPACTION_SUMMARY = "compaction/summary"
 
+# A delegated run. Both are recorded in the *parent's* log; the child keeps its
+# own complete log under its own session id.
+SUBAGENT_START = "subagent/start"
+SUBAGENT_END = "subagent/end"
+
 AGENT_ERROR = "agent/error"
 AGENT_INTERRUPT = "agent/interrupt"
 CONFIG_CHANGE = "config/change"
@@ -47,13 +52,17 @@ SURFACE_TYPES = frozenset({USER_MESSAGE, ASSISTANT_MESSAGE, TOOL_RESULT})
 IGNORABLE_TYPES = frozenset({
     ASSISTANT_CHUNK, LLM_USAGE, STEP_START, STEP_END,
     TURN_START, TURN_END, SESSION_START,
+    # Safe to skip: the parent model only ever saw the delegation's `tool/result`,
+    # so these two carry nothing a reconstruction would be missing. Contrast
+    # CONFIG_CHANGE above, which carries the system prompt itself.
+    SUBAGENT_START, SUBAGENT_END,
 })
 
 KNOWN_TYPES = frozenset({
     SESSION_START, SESSION_END_SEED, TURN_START, TURN_END, STEP_START, STEP_END,
     USER_MESSAGE, ASSISTANT_CHUNK, ASSISTANT_MESSAGE, TOOL_CALL, TOOL_APPROVAL,
     TOOL_RESULT, LLM_USAGE, COMPACTION_SUMMARY, AGENT_ERROR, AGENT_INTERRUPT,
-    CONFIG_CHANGE,
+    CONFIG_CHANGE, SUBAGENT_START, SUBAGENT_END,
 })
 
 

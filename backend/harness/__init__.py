@@ -14,8 +14,12 @@ codebase rather than ported from it:
 Layering matches `services/`: no `fastapi` import lives below this package, and
 failures are `core.errors` domain exceptions that `main.py` maps to statuses.
 """
+from harness import agents, skills
 from harness.context import HarnessContext, build_context
 from harness.events import SessionEvent
 from harness.loop.agent import resume_turn, run_turn
 
-__all__ = ["HarnessContext", "build_context", "SessionEvent", "run_turn", "resume_turn"]
+__all__ = [
+    "HarnessContext", "build_context", "SessionEvent", "run_turn", "resume_turn",
+    "agents", "skills",
+]

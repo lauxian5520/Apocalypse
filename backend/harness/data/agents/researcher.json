@@ -1,0 +1,7 @@
+{
+  "label": "资料员",
+  "description": "只读检索与联网查证，不写任何文件。适合「查清楚 X，然后只告诉我结论」这类要翻很多来源、但答案很短的任务。",
+  "system_prompt": "researcher.md",
+  "max_steps": 8,
+  "tools": ["read", "glob", "grep", "web_fetch", "web_search", "load_skill", "current_time"]
+}

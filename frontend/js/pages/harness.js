@@ -66,13 +66,30 @@
         dom.title.textContent = detail.title || '未命名会话';
         dom.subtitle.textContent =
             `${detail.preset} · ${detail.status}` +
+            (detail.agent ? ` · 子代理 ${detail.agent}` : '') +
             (detail.forked_from ? ` · 分支自 ${detail.forked_from.slice(0, 8)} @ seq ${detail.forked_at_seq}` : '') +
             (detail.workspace_files.length ? ` · ${detail.workspace_files.length} 个文件` : '');
+        renderParentLink(detail);
 
         T.renderUsage(dom.usage, detail.usage);
         renderConversation();
         renderTab();
         await loadSessions();
+    }
+
+    /** A child session has no sidebar row, so it needs its own way back up. */
+    function renderParentLink(detail) {
+        const existing = document.getElementById('hs-parent-link');
+        if (existing) existing.remove();
+        if (!detail.parent_id) return;
+
+        const link = document.createElement('button');
+        link.id = 'hs-parent-link';
+        link.type = 'button';
+        link.className = 'btn btn-sm';
+        link.textContent = '← 返回上级会话';
+        link.addEventListener('click', () => openSession(detail.parent_id));
+        dom.subtitle.parentNode.appendChild(link);
     }
 
     // ── conversation ─────────────────────────────────────────
@@ -109,6 +126,8 @@
                 return bubble('hs-msg hs-msg-error', `⚠ ${d.message || ''}`);
             case 'agent/interrupt':
                 return bubble('hs-msg hs-msg-error', '⏹ 已中断');
+            case 'subagent/end':
+                return subagentCard(event);
             default:
                 return null;   // infrastructure events belong in the inspector
         }
@@ -147,6 +166,33 @@
             const body = node.querySelector('.hs-tool-body');
             body.classList.toggle('hs-hidden');
             node.querySelector('.hs-caret').textContent = body.classList.contains('hs-hidden') ? '▸' : '▾';
+        });
+        return node;
+    }
+
+    /** A delegated run. The conversation shows only that it happened and what
+     *  it cost — the steps themselves live in the child's own trajectory, which
+     *  this card links to. */
+    function subagentCard(event) {
+        const d = event.data;
+        const usage = d.usage || {};
+        const node = document.createElement('div');
+        node.className = `hs-tool${d.stopped ? ' hs-tool-error' : ''}`;
+        node.innerHTML = `
+            <div class="hs-tool-head">
+                <span class="hs-tool-name">子代理 ${esc(d.agent)}</span>
+                <span class="hs-tool-summary">${d.steps} 步 · ${usage.total_tokens || 0} tokens${
+                    d.stopped ? ` · ${esc(d.stopped)}` : ''}</span>
+            </div>
+            <div class="hs-approval-actions">
+                <button type="button" class="btn btn-sm" data-open-child="${esc(d.child_session_id)}">
+                    查看它的完整轨迹
+                </button>
+            </div>`;
+        node.querySelector('[data-open-child]').addEventListener('click', (e) => {
+            // Child sessions are deliberately absent from the sidebar, so this
+            // link is the only way in. openSession works from an id alone.
+            openSession(e.currentTarget.dataset.openChild);
         });
         return node;
     }
@@ -294,9 +340,68 @@
             T.renderEvents(dom.tabBody, state.events, forkSession);
         } else if (state.tab === 'messages') {
             renderDerivedTab();
+        } else if (state.tab === 'files') {
+            renderFilesTab();
         } else {
             T.renderPlugins(dom.tabBody, state.registry);
         }
+    }
+
+    /** Files the agent produced. Refetched on open rather than cached: a turn
+     *  that just finished has almost certainly changed this list. */
+    async function renderFilesTab() {
+        if (!state.sessionId) {
+            dom.tabBody.innerHTML = '<div class="hs-empty">还没有会话</div>';
+            return;
+        }
+        T.renderFiles(dom.tabBody, null);
+        try {
+            const files = await apiFetch(`/harness/sessions/${state.sessionId}/files`);
+            T.renderFiles(dom.tabBody, files, downloadFile, downloadArchive);
+        } catch (e) {
+            dom.tabBody.innerHTML = `<div class="hs-empty">读取文件列表失败：${esc(e.message)}</div>`;
+        }
+    }
+
+    /** Download through fetch, not a bare <a href>.
+     *
+     *  The API is behind auth and apiFetch only returns JSON, so the bytes are
+     *  pulled here and handed to the browser as a blob. */
+    async function saveAs(url, fallbackName) {
+        const res = await fetch(`/api${url}`, {
+            credentials: 'include',
+            headers: { 'X-CSRF-Token': window.Auth?.csrfToken?.() || '' },
+        });
+        if (!res.ok) {
+            alert(`下载失败：HTTP ${res.status}`);
+            return;
+        }
+        // Prefer the server's filename; it carries the RFC 5987 encoding that
+        // keeps a CJK name intact.
+        const disposition = res.headers.get('content-disposition') || '';
+        const starred = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+        const plain = /filename="([^"]+)"/i.exec(disposition);
+        const name = starred ? decodeURIComponent(starred[1]) : (plain ? plain[1] : fallbackName);
+
+        const blob = await res.blob();
+        const href = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(href);
+    }
+
+    function downloadFile(path) {
+        const encoded = path.split('/').map(encodeURIComponent).join('/');
+        saveAs(`/harness/sessions/${state.sessionId}/files/${encoded}`, path.split('/').pop());
+    }
+
+    function downloadArchive() {
+        saveAs(`/harness/sessions/${state.sessionId}/archive`,
+               `harness-${state.sessionId.slice(0, 8)}.zip`);
     }
 
     async function renderDerivedTab() {

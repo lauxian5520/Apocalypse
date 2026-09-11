@@ -10,7 +10,9 @@ tells you exactly which link is broken instead of only the first one.
 import argparse
 import asyncio
 import inspect
+import io
 import json
+import os
 import sys
 import traceback
 import uuid
@@ -22,16 +24,21 @@ import httpx  # noqa: E402
 
 from core.config import get_settings  # noqa: E402
 from core.database import Base, SessionLocal, engine  # noqa: E402
+from core.errors import NotFoundError, ValidationError  # noqa: E402
 from core.providers import provider_config  # noqa: E402
 import models  # noqa: E402,F401  (registers the mappers)
-from harness import build_context, events as ev, run_turn  # noqa: E402
+from harness import agents, build_context, events as ev, run_turn, skills  # noqa: E402
+from harness.context import build_subagent_context, compose_prompt  # noqa: E402
 from harness.llm.pricing import estimate_cost  # noqa: E402
 from harness.llm.registry import build_adapter  # noqa: E402
+from harness.sandbox.local import LocalSandbox  # noqa: E402
 from harness.sandbox.workspace import Workspace  # noqa: E402
 from harness.session import manager  # noqa: E402
 from harness.session.projection import derive_messages, logged_system_prompt  # noqa: E402
 from harness.session.sqlite_store import SqliteSessionStore  # noqa: E402
-from harness.tools.approval import ALLOW, ASK, DENY, ApprovalPolicy  # noqa: E402
+from harness.tools.approval import (  # noqa: E402
+    ALLOW, ASK, DENY, ApprovalPolicy, StrictApprovalPolicy)
+from harness.tools.base import ToolContext, ToolSpec  # noqa: E402
 from harness.tools.registry import ToolRegistry, list_presets, load_specs  # noqa: E402
 from models.harness import HarnessSession  # noqa: E402
 from models.user import User  # noqa: E402
@@ -127,6 +134,196 @@ def check_registry() -> str:
     shell = "开" if settings.harness_shell_enabled else "关"
     return (f"契约绑定 {len(specs)} 个 · 本模式启用 {len(registry.describe())} 个 · "
             f"预设 {presets} · shell {shell}")
+
+
+def check_discovery() -> str:
+    """Tools must come from the contract files alone, in a stable order."""
+    import harness.tools.registry as reg
+
+    contracts = {p.stem for p in reg.TOOLS_DIR.glob("*.json") if not p.stem.startswith("_")}
+    modules = {spec.module for spec in load_specs().values()}
+    if contracts != modules:
+        raise RuntimeError(f"契约 {sorted(contracts)} 与已加载模块 {sorted(modules)} 不一致")
+
+    # The tools array reaches the provider in this order and prefix caching only
+    # pays while it is byte-identical, so a rebuild must reproduce it exactly.
+    first = [t["function"]["name"] for t in ToolRegistry("standard").schemas()]
+    reg.load_specs.cache_clear()
+    second = [t["function"]["name"] for t in ToolRegistry("standard").schemas()]
+    if first != second:
+        raise RuntimeError("两次发现得到的工具顺序不同，前缀缓存会失效")
+
+    # A contract with no module is a packaging error and must not load quietly.
+    ghost = reg.TOOLS_DIR / "_check_ghost.json"
+    ghost.write_text('{"tools": []}', encoding="utf-8")
+    orphan = reg.TOOLS_DIR / "check_ghost.json"
+    orphan.write_text('{"tools": []}', encoding="utf-8")
+    try:
+        reg.load_specs.cache_clear()
+        try:
+            load_specs()
+            raise RuntimeError("缺少实现的契约被静默接受了")
+        except ValidationError:
+            pass
+    finally:
+        ghost.unlink(missing_ok=True)
+        orphan.unlink(missing_ok=True)
+        reg.load_specs.cache_clear()
+
+    dropped_in = [n for n in ("load_skill", "subagent") if n in load_specs()]
+    return (f"契约驱动 {len(contracts)} 个模块 · 顺序稳定 · 孤儿契约被拒 · "
+            f"零注册代码接入 {dropped_in}")
+
+
+def check_skills() -> str:
+    from harness import skills
+
+    names = [s.name for s in skills.list_skills()]
+    if not names:
+        raise RuntimeError("没有发现任何技能")
+    catalogue = skills.catalogue()
+    for name in names:
+        if name not in catalogue:
+            raise RuntimeError(f"技能 {name} 不在目录清单里")
+    if not skills.read_skill(names[0]).strip():
+        raise RuntimeError(f"技能 {names[0]} 正文为空")
+
+    # A name is looked up in the scanned index, never joined into a path.
+    for bad in ("../../.env", "nope", f"{names[0]}/../../x"):
+        try:
+            skills.read_skill(bad)
+            raise RuntimeError(f"{bad!r} 竟然读到了内容")
+        except NotFoundError:
+            pass
+    try:
+        skills.read_skill(names[0], allowed=[])
+        raise RuntimeError("预设的技能白名单没有生效")
+    except NotFoundError:
+        pass
+
+    # One malformed file must be skipped, not fatal.
+    broken = skills.SKILLS_DIR / "_check_broken.md"
+    broken.write_text("没有 frontmatter\n", encoding="utf-8")
+    try:
+        problems = skills.problems()
+        if not any(p["file"] == broken.name for p in problems):
+            raise RuntimeError("坏掉的技能文件没有被报告")
+        if [s.name for s in skills.list_skills()] != names:
+            raise RuntimeError("一个坏文件影响了其他技能")
+    finally:
+        broken.unlink(missing_ok=True)
+
+    return f"技能 {names} · 清单已注入 · 越权与穿越均被拒 · 坏文件只跳过不致命"
+
+
+async def check_artifacts() -> str:
+    """Files the agent produces, and the path that gets them back out."""
+    import zipfile
+
+    # A packaged skill must be discovered, and its scripts must land somewhere
+    # the sandbox can actually reach.
+    packaged = [sk for sk in skills.list_skills() if sk.packaged]
+    workspace = Workspace(f"check-artifacts-{uuid.uuid4().hex[:8]}")
+    workspace.ensure()
+    try:
+        installed = []
+        if packaged:
+            installed = skills.install(packaged[0].name, workspace)
+            if not installed:
+                raise RuntimeError(f"技能包 {packaged[0].name} 没有装出任何文件")
+            for rel in installed:
+                if not os.path.isfile(workspace.resolve(rel)):
+                    raise RuntimeError(f"{rel} 声称已装入但不存在")
+                if not rel.startswith(skills.INSTALL_DIR + "/"):
+                    raise RuntimeError(f"{rel} 装到了约定目录之外")
+
+        # The download route resolves through the same containment check every
+        # tool uses; prove it still refuses the classics.
+        with open(workspace.resolve("artifact.bin"), "wb") as f:
+            f.write(b"\x00binary\xff" * 64)
+        for bad in ("../../../etc/passwd", "/etc/passwd", "..", "a/../../../x"):
+            try:
+                workspace.resolve(bad)
+            except ValidationError:
+                continue
+            raise RuntimeError(f"下载路径 {bad!r} 没有被拒绝")
+
+        # And that a zip of the workspace is actually readable.
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for dirpath, _, filenames in os.walk(workspace.root):
+                for name in filenames:
+                    full = os.path.join(dirpath, name)
+                    archive.write(full, workspace.relative(full))
+        check = zipfile.ZipFile(io.BytesIO(buffer.getvalue()))
+        if check.testzip() is not None:
+            raise RuntimeError("打包出的 zip 损坏")
+        entries = len(check.namelist())
+    finally:
+        workspace.destroy()
+
+    names = [sk.name for sk in packaged] or ["（无）"]
+    return (f"技能包 {names} 可装入工作区（{len(installed)} 个文件）· "
+            f"越界路径被拒 · zip 可读（{entries} 项）")
+
+
+async def check_subagent() -> str:
+    """Everything about delegation that can be checked without spending tokens."""
+    names = agents.names()
+    if not names:
+        raise RuntimeError("没有发现任何子代理定义")
+    for name in names:
+        registry = ToolRegistry(definition=agents.load_agent(name))
+        if "subagent" in registry:
+            raise RuntimeError(f"子代理 {name} 自己也能派发子代理，会无限递归")
+        if registry.max_steps > settings.harness_subagent_max_steps:
+            raise RuntimeError(f"子代理 {name} 的步数超过全局上限")
+
+    parent = ToolRegistry("standard")
+    if settings.harness_subagent_enabled and "subagent" not in parent:
+        raise RuntimeError("已启用子代理，但标准模式里没有这个工具")
+    if "可用子代理" not in compose_prompt(parent):
+        raise RuntimeError("主提示词里没有子代理清单")
+
+    workspace = Workspace(f"check-sub-{uuid.uuid4().hex[:8]}")
+    try:
+        child = build_subagent_context(
+            "check-child", names[0], workspace, LocalSandbox(workspace), depth=0
+        )
+        if child.depth != 1:
+            raise RuntimeError("子上下文的 depth 没有加一")
+        if child.workspace is not workspace:
+            raise RuntimeError("子代理没有共用父会话的工作区")
+        if "可用子代理" in child.system_prompt:
+            raise RuntimeError("子代理被告知了它无法使用的派发能力")
+
+        # ask -> deny inside a child, because nobody can answer down there.
+        strict = StrictApprovalPolicy()
+        fake = ToolSpec(name="bash", description="", parameters={},
+                        permission="exec", handler=lambda ctx: None)
+        if strict.decide(fake, {"command": "curl http://x"}).verdict != DENY:
+            raise RuntimeError("子代理里需要审批的命令没有被拒绝")
+
+        # The spend guards, through the real execution path rather than by
+        # reading the source: a guard that is never reached is not a guard.
+        sandbox = LocalSandbox(workspace)
+        rejected = {
+            "深度": (ToolContext("check", sandbox, workspace,
+                               depth=settings.harness_subagent_max_depth),
+                    {"task": "x", "agent": names[0]}),
+            "空任务": (ToolContext("check", sandbox, workspace), {"task": " ", "agent": names[0]}),
+            "未知角色": (ToolContext("check", sandbox, workspace),
+                       {"task": "x", "agent": "definitely-not-an-agent"}),
+        }
+        for label, (ctx, args) in rejected.items():
+            text, is_error = await parent.execute("subagent", json.dumps(args), ctx)
+            if not is_error:
+                raise RuntimeError(f"{label}这一关没有拦住：{text}")
+    finally:
+        workspace.destroy()
+
+    return (f"子代理 {names} · 不可递归 · 共用工作区 · depth 递增 · "
+            f"严格策略把 ask 变 deny · 上限 {settings.harness_subagent_max_per_session} 次/会话")
 
 
 def check_approval() -> str:
@@ -350,6 +547,10 @@ async def main() -> int:
     await stage("数据库", check_database)
     await stage("沙箱与路径收敛", check_sandbox)
     await stage("工具注册表", check_registry)
+    await stage("工具自动发现", check_discovery)
+    await stage("技能", check_skills)
+    await stage("子代理装配", check_subagent)
+    await stage("文件产出与下载", check_artifacts)
     await stage("审批策略", check_approval)
     await stage("事件日志与消息投影", check_log_projection)
 

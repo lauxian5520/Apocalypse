@@ -1,13 +1,30 @@
-﻿/* sprite-chat.js — floating 3D assistant: SSE chat, page summary, world clock. */
+/* sprite-chat.js — floating 3D assistant 天启: SSE chat, page summary, world clock.
+
+   The sprite expresses itself through its own face — eye shape, eye colour,
+   aura — not through a text bubble. The bubble it used to have was a separate
+   element with its own show/hide timers, and those timers raced with the
+   hover state: re-entering within the hide delay left the wrong caption on
+   screen and reset the face while the pointer was still on it. A single mood
+   on the model has no second state to fall out of sync with. */
 (function () {
   if (window.__MW_SPRITE_CHAT_LOADED) return;
   window.__MW_SPRITE_CHAT_LOADED = true;
 
+  const NAME = '天启';
+
   const pageName = (location.pathname.split('/').pop() || '').toLowerCase();
-  // Pages that already own the conversation: the DM view (context confusion)
-  // and the harness workbench (two chat boxes on one screen).
-  const CHAT_HOSTING_PAGES = ['messages.html', 'harness.html'];
+  // Pages that already own the conversation. Only the DM view qualifies: a
+  // message there is addressed to a person, and a second box that answers as
+  // 天启 reads as that person replying.
+  // The harness workbench used to be on this list. It is a different agent in
+  // a different session, not the same conversation twice, and opting it out
+  // left the sprite sitting there inert — clicking it did nothing at all.
+  const CHAT_HOSTING_PAGES = ['messages.html'];
   const disableAiChatOnPage = CHAT_HOSTING_PAGES.includes(pageName);
+
+  // Assigned by the 3D section below. Chat code calls it without caring
+  // whether WebGL ever came up.
+  let setMood = () => {};
 
   function ensureContainer() {
     let el = document.getElementById('sprite-container');
@@ -183,6 +200,24 @@
       state.source = resolved.source;
       render();
     });
+
+    makeClockDraggable(root);
+  }
+
+  /** The clock scales as a whole: its stylesheet sizes everything in `em`, so
+   *  one font-size on the root moves date, time and meta together. */
+  function makeClockDraggable(root) {
+    if (!window.FloatingPanel) return;
+    const baseWidth = root.getBoundingClientRect().width || 136;
+    window.FloatingPanel.make(root, {
+      id: 'clock',
+      autoHeight: true,
+      minWidth: 96,
+      maxWidth: 420,
+      onResize: (w) => {
+        root.style.fontSize = `${(w / baseWidth).toFixed(3)}rem`;
+      },
+    });
   }
 
   function ensureChatUI() {
@@ -191,20 +226,20 @@
     const tpl = `
       <div class="chat-dialog" id="chat-dialog">
         <div class="chat-dialog-header">
-          <div class="chat-dialog-title"><span>小七</span></div>
+          <div class="chat-dialog-title"><span>${NAME}</span></div>
           <div class="chat-dialog-actions">
             <button class="chat-mini-btn" id="chat-summary" title="总结当前页面">总结本页</button>
             <button class="chat-dialog-close" id="chat-close">✕</button>
           </div>
         </div>
         <div class="chat-messages" id="chat-messages">
-          <div class="msg msg-ai">你好，我是 小七。登录后我可以与你对话，并帮你总结当前页面内容。</div>
+          <div class="msg msg-ai">${NAME}已就绪。登录后即可下达指令，或让我清算当前页面的内容。</div>
         </div>
         <div class="typing-indicator" id="typing-indicator" style="display:none">
           <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
         </div>
         <div class="chat-dialog-footer">
-          <input type="text" id="chat-input" placeholder="输入消息，或输入“总结本页”" autocomplete="off">
+          <input type="text" id="chat-input" placeholder="输入指令，或输入“总结本页”" autocomplete="off">
           <button id="chat-send">➤</button>
         </div>
       </div>
@@ -254,7 +289,56 @@
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
+  /** Put the dialog beside the sprite wherever the sprite currently is.
+   *  Without this, dragging the sprite to one corner would still open its
+   *  chat in the opposite one. */
+  function positionChatNearSprite() {
+    if (!chatDialog) return;
+    const s = container.getBoundingClientRect();
+    // `offsetWidth`/`offsetHeight`, not `getBoundingClientRect()`: the dialog
+    // owns a `transform: scale()` open/close transition, and a rect measured
+    // mid-transition is the *scaled* size. Anchoring off that put a 520px
+    // panel where a 468px one fitted and left the rest below the fold.
+    const dw = chatDialog.offsetWidth;
+    const dh = chatDialog.offsetHeight;
+    const gap = 16;
+
+    // Prefer the side with room; fall back to overlapping the edge rather
+    // than pushing the dialog off screen.
+    let left = s.left - dw - gap;
+    if (left < gap) left = s.right + gap;
+    left = Math.max(gap, Math.min(left, window.innerWidth - dw - gap));
+
+    let top = s.bottom - dh;
+    top = Math.max(gap, Math.min(top, window.innerHeight - dh - gap));
+
+    chatDialog.style.left = `${Math.round(left)}px`;
+    chatDialog.style.top = `${Math.round(top)}px`;
+    chatDialog.style.right = 'auto';
+    chatDialog.style.bottom = 'auto';
+  }
+
+  /* The dialog is opened nearly empty and grows as the reply streams in, but
+     `top` was pinned once at open time from the height it had *then*. A full
+     answer pushed the bottom of the panel — the tail of the reply and the
+     whole input row — below the fold, where the auto-scroll-to-bottom then
+     parked the newest text. On screen that looked like a frozen box the wheel
+     would not move. Re-anchoring on every size change keeps the panel's foot
+     beside the sprite and inside the viewport, so it grows upwards. */
+  if (chatDialog && typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => {
+      if (chatDialog.classList.contains('open')) positionChatNearSprite();
+    }).observe(chatDialog);
+  }
+
+  window.addEventListener('resize', () => {
+    if (chatDialog?.classList.contains('open')) positionChatNearSprite();
+  });
+
   function toggleChat() {
+    if (!chatDialog) return;
+    const opening = !chatDialog.classList.contains('open');
+    if (opening) positionChatNearSprite();
     chatDialog.classList.toggle('open');
     if (chatDialog.classList.contains('open')) {
       chatInput.focus();
@@ -263,14 +347,14 @@
 
   function pageSummaryText() {
     const clone = document.body.cloneNode(true);
-    clone.querySelectorAll('script,style,noscript,.chat-dialog,#sprite-container,.noise-overlay,.header,.nav,.nav-links,.nav-user,.nav-toggle').forEach((n) => n.remove());
+    clone.querySelectorAll('script,style,noscript,.chat-dialog,#sprite-container,#sprite-clock,.noise-overlay,.header,.nav,.nav-links,.nav-user,.nav-toggle').forEach((n) => n.remove());
     const txt = (clone.innerText || '').replace(/\s+/g, ' ').trim();
     return txt.slice(0, 5000);
   }
 
   async function summarizeCurrentPage() {
     if (!(await isLoggedIn())) {
-      appendMsg('ai', '请先登录后再使用页面总结。');
+      appendMsg('ai', '未授权。先登录，再下达指令。');
       return;
     }
 
@@ -281,6 +365,7 @@
     }
 
     typing.style.display = 'flex';
+    setMood('lock');
     try {
       const ret = await window.apiFetch('/ai/summarize', {
         method: 'POST',
@@ -291,6 +376,8 @@
     } catch (e) {
       typing.style.display = 'none';
       appendMsg('ai', `页面总结失败: ${e.message}`);
+    } finally {
+      setMood('idle');
     }
   }
 
@@ -308,6 +395,7 @@
     } finally {
       sending = false;
       if (chatSend) chatSend.disabled = false;
+      setMood('idle');
     }
   }
 
@@ -321,7 +409,7 @@
 
     if (!(await isLoggedIn())) {
       appendMsg('user', text);
-      appendMsg('ai', '请先登录才能使用 AI 对话。');
+      appendMsg('ai', '未授权。先登录，再下达指令。');
       return;
     }
 
@@ -331,6 +419,7 @@
     if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
 
     typing.style.display = 'flex';
+    setMood('lock');
 
     try {
       const res = await fetch('/api/ai/chat', {
@@ -374,6 +463,7 @@
       let buffer = '';
       let full = '';
       typing.style.display = 'none';
+      setMood('speak');
 
       while (true) {
         const { value, done } = await reader.read();
@@ -439,22 +529,59 @@
     });
   }
 
-  // 3D sprite (with graceful fallback)
-  if (!hasThree) {
-    container.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:52px;">✨</div>';
-    container.title = '打开 小七';
+  // ── the sprite ─────────────────────────────────────────────────
+  // Canvas is rendered larger than its box; the overflow is what gives the
+  // sprite its halo. Kept as a ratio so resizing preserves the look.
+  const RENDER_SCALE = 1.5;
+
+  function boxSize() {
+    const r = container.getBoundingClientRect();
+    return { w: Math.round(r.width) || 120, h: Math.round(r.height) || 120 };
+  }
+
+  /** No WebGL: a glyph that still opens the chat and still drags.
+   *
+   *  This path has to cover more than a missing library. `new WebGLRenderer()`
+   *  *throws* when a context cannot be created — headless browsers, blocked
+   *  GPUs, some remote desktops — and an uncaught throw here used to take the
+   *  click handler and `toggleSpriteChat` down with it, leaving the assistant
+   *  unreachable with no visible error. */
+  function useFallbackSprite() {
+    container.innerHTML = `<div class="sprite-fallback">✨</div>`;
+    container.title = `打开 ${NAME}（拖动可移动，右下角可缩放）`;
     container.addEventListener('click', (e) => {
       if (disableAiChatOnPage) return;
       e.stopPropagation();
       toggleChat();
     });
+    window.FloatingPanel?.make(container, {
+      id: 'sprite',
+      aspect: 1,
+      minWidth: 64,
+      maxWidth: 320,
+      onMove: () => {
+        if (chatDialog?.classList.contains('open')) positionChatNearSprite();
+      },
+    });
     window.toggleSpriteChat = toggleChat;
+  }
+
+  if (!hasThree) {
+    useFallbackSprite();
     return;
   }
 
-  const W = 180;
-  const H = 180;
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  const box = boxSize();
+  let W = box.w * RENDER_SCALE;
+  let H = box.h * RENDER_SCALE;
+
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  } catch (e) {
+    useFallbackSprite();
+    return;
+  }
   renderer.setSize(W, H);
   renderer.setPixelRatio(window.devicePixelRatio);
   container.innerHTML = '';
@@ -490,7 +617,7 @@
   const eyeGeo = new THREE.SphereGeometry(0.5, 32, 32);
   const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const archedEyeGeo = new THREE.TorusGeometry(0.6, 0.15, 16, 32, Math.PI);
-  
+
   const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
   leftEye.position.set(-1.8, 1, 6.5);
   eyeGroup.add(leftEye);
@@ -500,108 +627,152 @@
   eyeGroup.add(rightEye);
 
   const earGeo = new THREE.SphereGeometry(1.2, 32, 32);
-  const earMat = new THREE.MeshBasicMaterial({ 
-    color: 0xffffff, 
-    transparent: true, 
+  const earMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
     opacity: 0.4,
-    blending: THREE.AdditiveBlending 
+    blending: THREE.AdditiveBlending
   });
-  
+
   const leftEar = new THREE.Mesh(earGeo, earMat);
   leftEar.scale.set(0.8, 1.5, 0.8);
   leftEar.position.set(-8, 5, 0);
   scene.add(leftEar);
-  
+
   const rightEar = new THREE.Mesh(earGeo, earMat);
   rightEar.scale.set(0.8, 1.5, 0.8);
   rightEar.position.set(8, 5, 0);
   scene.add(rightEar);
 
+  // ── moods ──────────────────────────────────────────────────────
+  // The face is the whole vocabulary now, so each mood has to be readable at
+  // a glance: eye shape, tilt, size and the colour of both eyes and aura.
+  // `slant` mirrors between the eyes, which is what makes a brow read as a
+  // brow rather than as two unrelated arcs.
+  const MOODS = {
+    idle:   { arc: false, rot: 0, slant: 0,    scale: { x: 1,    y: 1 },    eye: [1, 1, 1],        aura: [1, 1, 1],       dur: 0.55 },
+    // hover — the four below are picked at random so it does not feel scripted
+    glare:  { arc: true,  rot: 0, slant: 0.55, scale: { x: 1.25, y: 1 },    eye: [1, 0.34, 0.22],  aura: [1, 0.3, 0.2],   dur: 0.26 },
+    narrow: { arc: false, rot: 0, slant: 0,    scale: { x: 1.5,  y: 0.22 }, eye: [1, 0.45, 0.25],  aura: [1, 0.36, 0.18], dur: 0.24 },
+    scan:   { arc: false, rot: 0, slant: 0,    scale: { x: 1.35, y: 1.35 }, eye: [1, 0.68, 0.2],   aura: [1, 0.55, 0.15], dur: 0.3 },
+    charge: { arc: false, rot: 0, slant: 0,    scale: { x: 0.75, y: 0.75 }, eye: [1, 0.85, 0.55],  aura: [1, 0.72, 0.3],  dur: 0.2 },
+    // working / talking
+    lock:   { arc: false, rot: 0, slant: 0,    scale: { x: 0.45, y: 0.45 }, eye: [1, 0.12, 0.1],   aura: [1, 0.1, 0.08],  dur: 0.18 },
+    speak:  { arc: false, rot: 0, slant: 0,    scale: { x: 1.1,  y: 1.1 },  eye: [1, 0.62, 0.28],  aura: [1, 0.45, 0.2],  dur: 0.3 },
+  };
+  const HOVER_MOODS = ['glare', 'narrow', 'scan', 'charge'];
 
-  let time = 0;
-  let mx = 0;
-  let my = 0;
-  let isHovered = false;
+  let currentMood = 'idle';
+  let hovering = false;
+  // A "busy" mood outranks hover: while the model is answering, the face
+  // should not flip back to idle because the pointer wandered off.
+  let busyMood = null;
 
-  const greetEl = document.createElement('div');
-  greetEl.className = 'sprite-greeting';
-  container.appendChild(greetEl);
+  const tween = (targets, props, duration) => {
+    if (window.gsap) {
+      gsap.to(targets, { ...props, duration, overwrite: 'auto' });
+      return;
+    }
+    // No GSAP (it is a CDN script and may not load): apply instantly rather
+    // than leaving the face frozen in whatever it was.
+    (Array.isArray(targets) ? targets : [targets]).forEach((t) => {
+      Object.entries(props).forEach(([k, v]) => { if (k in t) t[k] = v; });
+    });
+  };
 
-  let isGreeting = false;
-  let greetTimeout = null;
+  function applyMood(name) {
+    const m = MOODS[name] || MOODS.idle;
+    currentMood = name;
+
+    leftEye.geometry = m.arc ? archedEyeGeo : eyeGeo;
+    rightEye.geometry = m.arc ? archedEyeGeo : eyeGeo;
+    leftEye.rotation.x = m.rot;
+    rightEye.rotation.x = m.rot;
+    // Mirrored, so the pair reads as one expression.
+    leftEye.rotation.z = m.slant;
+    rightEye.rotation.z = -m.slant;
+
+    tween([leftEye.scale, rightEye.scale], { x: m.scale.x, y: m.scale.y, z: 1 }, m.dur);
+    tween(eyeMat.color, { r: m.eye[0], g: m.eye[1], b: m.eye[2] }, m.dur);
+    tween([leftEar.material.color, rightEar.material.color],
+          { r: m.aura[0], g: m.aura[1], b: m.aura[2] }, m.dur);
+  }
+
+  setMood = function (name) {
+    if (name === 'idle') {
+      busyMood = null;
+      applyMood(hovering ? pickHoverMood() : 'idle');
+      return;
+    }
+    busyMood = name;
+    applyMood(name);
+  };
+
+  let lastHoverMood = '';
+  function pickHoverMood() {
+    // Never the same face twice running; repetition is what made the old
+    // random bubble feel broken rather than alive.
+    const pool = HOVER_MOODS.filter((m) => m !== lastHoverMood);
+    lastHoverMood = pool[Math.floor(Math.random() * pool.length)];
+    return lastHoverMood;
+  }
 
   container.addEventListener('mouseenter', () => {
-    isHovered = true;
-    if (isGreeting || !window.gsap) {
-        greetEl.textContent = '✨ 点击和我聊聊 (小七)';
-        greetEl.classList.add('show');
-        return;
-    }
-    isGreeting = true;
-
-    const reactions = [
-      { msg: "(>////<)", eyeScale: { x: 1, y: 0.15 }, color: { r: 1, g: 0.5, b: 0.6 }, shape: 'sphere' },
-      { msg: "😳", eyeScale: { x: 1.8, y: 1.8 }, color: { r: 1, g: 0.4, b: 0.4 }, shape: 'sphere' },
-      { msg: "(〃∀〃)", eyeScale: { x: 1.2, y: 1.2 }, color: { r: 1, g: 0.6, b: 0.8 }, shape: 'arc', rot: Math.PI },
-      { msg: "✨", eyeScale: { x: 1.5, y: 1.5 }, color: { r: 1, g: 1, b: 0.4 }, shape: 'sphere' },
-      { msg: "(/▽＼)", eyeScale: { x: 1, y: 0.1 }, color: { r: 1, g: 0.5, b: 0.7 }, shape: 'arc', rot: 0 }
-    ];
-    const r = reactions[Math.floor(Math.random() * reactions.length)];
-    
-    greetEl.textContent = r.msg;
-    greetEl.classList.add('show');
-
-    if (r.shape === 'arc') {
-      leftEye.geometry = archedEyeGeo;
-      rightEye.geometry = archedEyeGeo;
-      leftEye.rotation.x = r.rot;
-      rightEye.rotation.x = r.rot;
-    } else {
-      leftEye.geometry = eyeGeo;
-      rightEye.geometry = eyeGeo;
-      leftEye.rotation.x = 0;
-      rightEye.rotation.x = 0;
-    }
-
-    gsap.to([leftEar.material.color, rightEar.material.color], { r: r.color.r, g: r.color.g, b: r.color.b, duration: 0.3 });
-    gsap.to([leftEye.scale, rightEye.scale], { x: r.eyeScale.x, y: r.eyeScale.y, duration: 0.3 });
-    gsap.to(particleSphere.position, { y: particleSphere.position.y + 2, duration: 0.1, yoyo: true, repeat: 1 });
+    hovering = true;
+    if (busyMood) return;
+    applyMood(pickHoverMood());
+    tween(particleSphere.position, { y: particleSphere.position.y + 1.5 }, 0.12);
+    setTimeout(() => tween(particleSphere.position, { y: 0 }, 0.2), 130);
   });
 
   container.addEventListener('mouseleave', () => {
-    isHovered = false;
-    mx = 0;
-    my = 0;
-    
-    if (greetTimeout) clearTimeout(greetTimeout);
-    greetTimeout = setTimeout(() => {
-        if (window.gsap) {
-            gsap.to([leftEar.material.color, rightEar.material.color], { r: 1, g: 1, b: 1, duration: 1 });
-            gsap.to([leftEye.scale, rightEye.scale], {
-                x: 1, y: 1, z: 1,
-                duration: 0.5,
-                onComplete: () => {
-                    leftEye.geometry = eyeGeo;
-                    rightEye.geometry = eyeGeo;
-                    leftEye.rotation.x = 0;
-                    rightEye.rotation.x = 0;
-                }
-            });
-        }
-        greetEl.classList.remove('show');
-        isGreeting = false;
-    }, 500);
+    hovering = false;
+    if (busyMood) return;
+    applyMood('idle');
   });
 
+  // ── blink ──────────────────────────────────────────────────────
+  // Only when the eyes are round; squeezing an already-narrowed brow reads as
+  // a glitch, not a blink.
+  function scheduleBlink() {
+    setTimeout(() => {
+      const m = MOODS[currentMood];
+      if (m && !m.arc && m.scale.y > 0.5 && window.gsap) {
+        gsap.to([leftEye.scale, rightEye.scale], {
+          y: 0.08, duration: 0.07, yoyo: true, repeat: 1, overwrite: 'auto',
+        });
+      }
+      scheduleBlink();
+    }, 3500 + Math.random() * 5000);
+  }
+  scheduleBlink();
+
+  // ── gaze ───────────────────────────────────────────────────────
+  // Tracked from the sprite's live centre, so it keeps working after the
+  // sprite is dragged somewhere else. Normalising by a fixed radius rather
+  // than the window means the gaze does not go slack on a wide monitor.
+  const GAZE_RADIUS = 420;
+  let mx = 0;
+  let my = 0;
+  let gazeX = 0;
+  let gazeY = 0;
+
   window.addEventListener('mousemove', (e) => {
-    const rect = container.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    mx = ((e.clientX - centerX) / window.innerWidth) * 4; 
-    my = ((e.clientY - centerY) / window.innerHeight) * 4;
-    mx = Math.max(-1.5, Math.min(1.5, mx));
-    my = Math.max(-1.5, Math.min(1.5, my));
-  });
+    const r = container.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    mx = Math.max(-1, Math.min(1, (e.clientX - cx) / GAZE_RADIUS));
+    my = Math.max(-1, Math.min(1, (e.clientY - cy) / GAZE_RADIUS));
+  }, { passive: true });
+
+  // Touch has no hover; a tap still deserves a reaction.
+  window.addEventListener('touchmove', (e) => {
+    const t = e.touches?.[0];
+    if (!t) return;
+    const r = container.getBoundingClientRect();
+    mx = Math.max(-1, Math.min(1, (t.clientX - (r.left + r.width / 2)) / GAZE_RADIUS));
+    my = Math.max(-1, Math.min(1, (t.clientY - (r.top + r.height / 2)) / GAZE_RADIUS));
+  }, { passive: true });
 
   container.addEventListener('click', (e) => {
     if (disableAiChatOnPage) return;
@@ -609,7 +780,28 @@
     toggleChat();
   });
 
+  container.title = `打开 ${NAME}（拖动可移动，右下角可缩放）`;
+
+  // ── drag / resize ──────────────────────────────────────────────
+  window.FloatingPanel?.make(container, {
+    id: 'sprite',
+    aspect: 1,
+    minWidth: 64,
+    maxWidth: 320,
+    onResize: (w, h) => {
+      W = w * RENDER_SCALE;
+      H = h * RENDER_SCALE;
+      renderer.setSize(W, H);
+      camera.aspect = W / H;
+      camera.updateProjectionMatrix();
+    },
+    onMove: () => {
+      if (chatDialog?.classList.contains('open')) positionChatNearSprite();
+    },
+  });
+
   const base = sphereGeo.attributes.position.array.slice();
+  let time = 0;
 
   function animate() {
     requestAnimationFrame(animate);
@@ -627,32 +819,41 @@
         pos[i * 3 + 2] = pz * displacement;
     }
     sphereGeo.attributes.position.needsUpdate = true;
-    
+
+    // The idle bob is a transform, and dragging writes left/top, so the two
+    // never fight over the same property.
     container.style.transform = `translateY(${Math.sin(time * 0.8) * 15}px)`;
     leftEar.position.y = 5 + Math.sin(time * 1.5) * 1.5;
     rightEar.position.y = 5 + Math.cos(time * 1.5) * 1.5;
     leftEar.rotation.z = Math.sin(time) * 0.2;
     rightEar.rotation.z = -Math.sin(time) * 0.2;
 
+    // Ease toward the pointer instead of snapping, so the gaze reads as
+    // following rather than teleporting.
+    gazeX += (mx - gazeX) * 0.12;
+    gazeY += (my - gazeY) * 0.12;
+
     particleSphere.rotation.y += 0.005;
-    const targetRotX = my * 0.4;
-    const targetRotY = mx * 0.4;
-    particleSphere.rotation.x += (targetRotX - particleSphere.rotation.x) * 0.05;
-    particleSphere.rotation.y += (targetRotY - particleSphere.rotation.y) * 0.05;
+    particleSphere.rotation.x += (gazeY * 0.45 - particleSphere.rotation.x) * 0.05;
+    particleSphere.rotation.y += (gazeX * 0.45 - particleSphere.rotation.y) * 0.05;
 
     eyeGroup.position.copy(particleSphere.position);
-    const lookFactorX = 1.2;
-    const lookFactorY = 0.8;
-    leftEye.position.x = -1.8 + mx * lookFactorX;
-    leftEye.position.y = 1 - my * lookFactorY;
-    rightEye.position.x = 1.8 + mx * lookFactorX;
-    rightEye.position.y = 1 - my * lookFactorY;
+    const lookX = 1.5;
+    const lookY = 1.1;
+    leftEye.position.x = -1.8 + gazeX * lookX;
+    leftEye.position.y = 1 - gazeY * lookY;
+    rightEye.position.x = 1.8 + gazeX * lookX;
+    rightEye.position.y = 1 - gazeY * lookY;
+    // Push the eyes forward as they travel out, so they stay on the surface
+    // of the sphere instead of sinking into it at the extremes.
+    const depth = 6.5 - (Math.abs(gazeX) + Math.abs(gazeY)) * 0.5;
+    leftEye.position.z = depth;
+    rightEye.position.z = depth;
 
     renderer.render(scene, camera);
   }
 
   animate();
+  applyMood('idle');
   window.toggleSpriteChat = toggleChat;
 })();
-
-

@@ -316,3 +316,40 @@ body { padding-top: 80px; }
     .hs-sidebar { height: 240px; }
     .hs-msg, .hs-tool, .hs-tool-approval { max-width: 100%; width: auto; }
 }
+
+/* ── files tab ───────────────────────────────────────────────── */
+.hs-file-actions {
+    padding: 0 .35rem .5rem;
+}
+
+.hs-file {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .55rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, .06);
+    background: rgba(255, 255, 255, .02);
+    margin-bottom: .35rem;
+}
+
+.hs-file-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.hs-file-name {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: .74rem;
+    color: #d6dcff;
+    /* A long generated path must not push the download button off the panel. */
+    overflow-wrap: anywhere;
+}
+
+.hs-file-meta {
+    display: block;
+    margin-top: .15rem;
+    font-size: .66rem;
+    color: #8b95c4;
+}

@@ -26,6 +26,13 @@ class HarnessSession(Base):
     # where a trajectory came from.
     forked_from: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     forked_at_seq: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Set when this session is a subagent run dispatched by another one. A fork
+    # copies history; a delegation does not, so the two cannot share a column.
+    # Deliberately unindexed: these arrive by ALTER TABLE on deployed databases,
+    # which adds no index, and declaring one here would describe a schema that
+    # does not exist.
+    parent_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    agent: Mapped[str] = mapped_column(String(40), default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

@@ -33,6 +33,10 @@
             case 'agent/interrupt': return `中断于 ${d.where || ''}`;
             case 'step/start': case 'step/end': return `step ${d.step ?? ''}`;
             case 'session/end-seed': return `分支自 ${(d.forked_from || '').slice(0, 8)}`;
+            case 'subagent/start': return `派发 ${d.agent} → ${d.task || ''}`;
+            case 'subagent/end':
+                return `${d.agent} 完成，${d.steps} 步 / ${(d.usage || {}).total_tokens || 0} tokens`
+                    + (d.stopped ? `（${d.stopped}）` : '');
             default: return '';
         }
     }
@@ -101,6 +105,63 @@
         }).join('');
     }
 
+    /** Files tab: what the agent produced, and how to get it out.
+     *
+     *  `onDownload` is passed in rather than using plain <a href>: the API
+     *  needs the auth header, so the fetch happens in harness.js and the blob
+     *  is handed to the browser. */
+    function renderFiles(container, files, onDownload, onArchive) {
+        if (!files) {
+            container.innerHTML = '<div class="hs-empty">读取中…</div>';
+            return;
+        }
+        if (!files.length) {
+            container.innerHTML = '<div class="hs-empty">这个会话还没有产出文件</div>';
+            return;
+        }
+
+        // Skill scripts are unpacked into the workspace but are not the user's
+        // work product, so they sit in their own group at the bottom.
+        const work = files.filter((f) => !f.is_skill_asset);
+        const assets = files.filter((f) => f.is_skill_asset);
+
+        const row = (f) => `
+            <div class="hs-file" data-path="${esc(f.path)}">
+                <div class="hs-file-main">
+                    <span class="hs-file-name">${esc(f.path)}</span>
+                    <span class="hs-file-meta">${formatBytes(f.size_bytes)} · ${formatWhen(f.modified_at)}</span>
+                </div>
+                <button type="button" class="btn btn-sm" data-download="${esc(f.path)}">下载</button>
+            </div>`;
+
+        container.innerHTML = `
+            <div class="hs-file-actions">
+                <button type="button" class="btn btn-sm btn-primary" data-archive="1">
+                    打包下载全部（${files.length}）
+                </button>
+            </div>
+            ${work.map(row).join('')}
+            ${assets.length ? `<div class="section-label" style="padding:.7rem .35rem .2rem">
+                技能装入的脚本</div>${assets.map(row).join('')}` : ''}`;
+
+        container.querySelectorAll('[data-download]').forEach((b) => {
+            b.addEventListener('click', () => onDownload(b.dataset.download));
+        });
+        container.querySelector('[data-archive]')?.addEventListener('click', onArchive);
+    }
+
+    function formatBytes(n) {
+        if (n < 1024) return `${n} B`;
+        if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+        return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    function formatWhen(ms) {
+        const d = new Date(ms);
+        return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} `
+             + `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+
     /** Plugin panel tab: which tools and hooks are actually loaded. */
     function renderPlugins(container, registry) {
         if (!registry) {
@@ -123,6 +184,30 @@
                 <span class="hs-badge">${esc(h.point)}</span>
             </div>`).join('');
 
+        const skills = (registry.skills || []).map((s) => `
+            <div class="hs-plugin">
+                <div>
+                    <span class="hs-plugin-name">${esc(s.name)}</span>
+                    ${s.packaged ? '<span class="hs-badge">包</span>' : ''}
+                    ${(s.keywords || []).map((k) => `<span class="hs-badge">${esc(k)}</span>`).join('')}
+                </div>
+                <div class="hs-plugin-desc">${esc(s.description)}</div>
+                ${(s.files || []).length
+                    ? `<div class="hs-plugin-desc">附带：${(s.files || []).map(esc).join(' · ')}</div>`
+                    : ''}
+            </div>`).join('') || '<div class="hs-empty">没有可用技能</div>';
+
+        const agents = (registry.agents || []).map((a) => `
+            <div class="hs-plugin">
+                <div>
+                    <span class="hs-plugin-name">${esc(a.name)}</span>
+                    <span class="hs-badge">${esc(a.label)}</span>
+                    <span class="hs-badge">${a.max_steps} 步</span>
+                </div>
+                <div class="hs-plugin-desc">${esc(a.description)}</div>
+                <div class="hs-plugin-desc">${(a.tools || []).map(esc).join(' · ')}</div>
+            </div>`).join('') || '<div class="hs-empty">子代理未启用</div>';
+
         container.innerHTML = `
             <div class="hs-plugin">
                 <div class="hs-plugin-desc">
@@ -132,6 +217,8 @@
                 </div>
             </div>
             <div class="section-label" style="padding:.6rem .35rem .2rem">TOOLS</div>${tools}
+            <div class="section-label" style="padding:.6rem .35rem .2rem">SKILLS</div>${skills}
+            <div class="section-label" style="padding:.6rem .35rem .2rem">AGENTS</div>${agents}
             <div class="section-label" style="padding:.6rem .35rem .2rem">HOOKS</div>${hooks}`;
     }
 
@@ -151,5 +238,7 @@
             <span>预估费用 <b>${cost}</b></span>`;
     }
 
-    window.HarnessTrajectory = { renderEvents, renderDerived, renderPlugins, renderUsage, summarize };
+    window.HarnessTrajectory = {
+        renderEvents, renderDerived, renderPlugins, renderFiles, renderUsage, summarize,
+    };
 })();

@@ -1,0 +1,28 @@
+{
+  "_comment": "Delegation. The child runs in its own session with its own log; only its final answer comes back as this tool's result, which is the point — the intermediate steps never enter the parent's context.",
+  "tools": [
+    {
+      "name": "subagent",
+      "permission": "write",
+      "description": "把一个子任务派给独立的子代理去做，只有它的最终结论会回到这里，中间过程不占用当前上下文。适合步骤多、中间产物杂、结论却很短的任务。子代理看不到当前对话，所以任务描述必须自包含；它也无法向用户提问或请求批准。一两步能做完的事情自己做，不要派发。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "要完成什么，以及交回什么。写成自包含的一段话，子代理看不到你和用户的对话。"
+          },
+          "agent": {
+            "type": "string",
+            "description": "子代理名，取自系统提示词的「可用子代理」清单"
+          },
+          "context": {
+            "type": "string",
+            "description": "可选：子代理需要但无法自行获得的背景（已知结论、相关文件名、约束条件）"
+          }
+        },
+        "required": ["task", "agent"]
+      }
+    }
+  ]
+}

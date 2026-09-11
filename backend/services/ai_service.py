@@ -8,6 +8,8 @@ Failures are raised as `core.errors` types so this module stays free of HTTP
 concerns; `main.py` maps them onto status codes.
 """
 import json
+import logging
+from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
@@ -17,11 +19,33 @@ from core.errors import UpstreamError
 from core.providers import auth_headers, provider_config, require_configured
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 60
 STREAM_TIMEOUT_SECONDS = 120
 MAX_TOKENS = 2048
 TEMPERATURE = 0.7
+
+# The assistant's persona lives in a data file, not in this module, so its
+# voice can be rewritten without touching Python — the same split the harness
+# uses for its prompts. Read on each call rather than cached: it is one small
+# file, and editing it takes effect on the next message instead of the next
+# restart.
+PROMPT_DIR = Path(__file__).resolve().parent.parent / "data" / "prompts"
+SPRITE_PROMPT_FILE = PROMPT_DIR / "sprite.md"
+
+
+def sprite_system_prompt() -> str:
+    """The chat assistant's persona, or empty if the file is unreadable.
+
+    A missing persona degrades the assistant's voice; raising here would take
+    chat down entirely. The former is the better failure.
+    """
+    try:
+        return SPRITE_PROMPT_FILE.read_text(encoding="utf-8").strip()
+    except OSError as e:
+        logger.warning("[ai] persona prompt unreadable (%s); replying without one", e)
+        return ""
 
 
 def active_model() -> str:
