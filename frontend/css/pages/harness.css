@@ -25,11 +25,21 @@ body { padding-top: 80px; }
 }
 
 .hs-sidebar,
-.hs-main,
 .hs-inspector {
     display: flex;
     flex-direction: column;
     min-height: 0;          /* lets an overflowing child scroll inside the grid */
+    padding: 1rem;
+}
+
+/* A grid rather than a flex column, so `split-pane.js` can give the
+   conversation/composer boundary a real track to drag. The head is `auto`
+   (its height depends on how the title wraps), the conversation takes the
+   remainder, and the composer is the one with a stored height. */
+.hs-main {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-height: 0;
     padding: 1rem;
 }
 
@@ -109,7 +119,8 @@ body { padding-top: 80px; }
 .hs-main-actions { display: flex; gap: .5rem; flex: none; }
 
 .hs-conversation {
-    flex: 1;
+    min-height: 8rem;       /* never collapse to a single line, however short
+                               the viewport; the composer gives way instead */
     overflow-y: auto;
     padding: 1rem .25rem;
     display: flex;
@@ -424,4 +435,47 @@ body.hs-wide { --hs-output-height: 60vh; --hs-event-height: 50vh; }
     /* The grid is stacked here; a vertical divider would be meaningless.
        split-pane.js also hides them, this is the no-JS belt. */
     .split-handle { display: none; }
+}
+
+/* ── horizontal splitter (conversation / composer) ───────────── */
+.split-handle-row {
+    justify-self: stretch;
+    border-radius: 3px;
+    cursor: row-resize;
+    position: relative;
+    background: transparent;
+    transition: background .15s ease;
+}
+.split-handle-row::after {
+    content: '';
+    position: absolute;
+    inset: -4px 0;          /* widen the grab target, not the track */
+}
+.split-handle-row:hover,
+.hs-main.split-dragging .split-handle-row {
+    background: var(--accent, #6ea8ff);
+    opacity: .55;
+}
+.hs-main.split-dragging {
+    user-select: none;
+    cursor: row-resize;
+}
+.hs-main.split-dragging .hs-conversation,
+.hs-main.split-dragging .hs-composer {
+    pointer-events: none;
+}
+
+/* ── short viewports (landscape phones, split windows) ───────── */
+/* Measured on a 960x441 CSS viewport: `min-height: 480px` exceeded the
+   viewport, the head and composer took ~280px between them, and the
+   conversation was left showing a single line. Below this height the chrome
+   gives way instead of the content. */
+@media (max-height: 620px) {
+    .hs-layout { height: auto; min-height: 0; }
+    .hs-main { height: auto; min-height: 60vh; }
+    .hs-main-head { padding-bottom: .4rem; }
+    .hs-subtitle { display: none; }
+    .hs-input { min-height: 40px; }
+    .hs-composer { padding-top: .4rem; }
+    .hs-composer-actions { margin-top: .3rem; }
 }
