@@ -34,6 +34,38 @@ python ../tools/harness_probe.py --prompt "…"  # one full agent turn, no brows
 `harness_check.py` runs each stage independently and exits non-zero on any failure, so it works
 in a deploy script. Prefer adding a stage there over writing a one-off script.
 
+The RL workbench in `rl/` has its own staged check and its own CLI. Both run **from the
+repository root**, not from `backend/` — the opposite of `tools/`:
+
+```bash
+python -m rl.checks.rl_check --offline    # 19 stages, no tokens; 20 with a real rollout
+python -m rl.cli corpus hotpot --split validation && python -m rl.cli corpus index
+python -m rl.cli corpus verify            # re-hash docs.jsonl against its manifest
+python -m rl.cli tasks leakage --all --model deepseek-chat --resume --out data/leak.jsonl
+python -m rl.cli tasks split --require-coverage --leakage-file A.jsonl --leakage-file B.jsonl
+python -m rl.cli rollout --split dev -n 50 --out data/traj.jsonl --report out.md
+python -m rl.cli export data/traj.jsonl --format tokens --out data/verl.jsonl
+
+# training — the only part that needs a GPU. Both entry points preflight their
+# dependencies and exit with an actionable message rather than a traceback.
+python -m rl.train.run_sft collect --split train -n 400 -G 4   # no GPU
+python -m rl.train.run_sft train --base Qwen/Qwen2.5-1.5B-Instruct
+python -m rl.train.run_grpo --smoke                            # 2 questions, 1 step
+```
+
+**Two Python environments, on purpose.** `rl/` needs a tokenizer at rollout and eval time but
+torch only for training, and torch is not installable on this machine's default interpreter:
+
+| | version | has |
+|---|---|---|
+| default `python3` | conda 3.14 | `transformers`, `tokenizers`, `sqlalchemy`, `pyarrow`, `socksio`, `numpy` — everything except training |
+| `~/miniconda3/envs/py311` | 3.11 | `torch` (CPU) |
+
+So the corpus, task, verifier, rollout, export and mask stages run under the default
+interpreter, and the two torch-dependent check stages (`GRPO 损失`, `两种 advantage 实现一致`)
+are **skipped there and run under `py311`**. A GPU box installs
+`rl/requirements.txt` + `rl/requirements-trainer.txt` into one 3.11/3.12 env and gets all of it.
+
 ## External binaries
 
 Beyond `requirements.txt`, a few paths shell out. Each degrades with a clear message rather than a
@@ -51,8 +83,8 @@ embed no fonts and render on the viewer's machine.
 ## Layering
 
 ```
-routers  →  services | harness  →  models
-    └──────────┴─────────┴──────────┴────→  core
+rl/  ─→  routers  →  services | harness  →  models
+              └──────────┴─────────┴──────────┴────→  core
 ```
 
 Enforced by convention, not tooling — respect it:
@@ -62,6 +94,8 @@ Enforced by convention, not tooling — respect it:
   raise the domain exceptions in `core/errors.py`; `main.py`'s `AppError` handler maps them to
   status codes. `core/deps.py` is the one exception — it *is* the HTTP layer.
 - `harness/` is a self-contained subsystem sitting at the `services/` layer.
+- `rl/` sits outside `backend/` entirely and depends inward on `harness/`. Nothing under
+  `backend/` may import it — that is what keeps torch out of the web server's import graph.
 
 ## Things that will bite you
 
@@ -79,6 +113,15 @@ Enforced by convention, not tooling — respect it:
 - **SSE frame format is load-bearing.** `core/sse.py` emits `data: ` *with the space*; the browser
   does `line.slice(6)`. Don't "tidy" it. Errors after headers are flushed travel in-band as
   `{"error": …}`, never as a status code.
+- **`_MODULE_GATES` in `harness/tools/registry.py` kills a whole tool module by setting.**
+  A gated-off module disappears from every preset at once, so a preset asking for it never
+  overrides the deployment's answer. This is how `corpus` stays out of the live site: `standard`
+  is `tools: ["*"]`, so without the gate the three `corpus_*` tools would appear the moment the
+  contract file exists, and the provider's prefix cache would invalidate once. Default is off.
+- **`rl/` depends on `backend/harness`; `backend/` must never import `rl/`.** The corpus reader
+  and BM25 index live in `harness/corpus/` because they define what the agent *sees*; the
+  training and evaluation machinery wrapped around them lives in `rl/`. A dependency the other
+  way would put torch in the web server's import graph. See `rl/README.md`.
 - **Python 3.10+** is gated at import time in `main.py`.
 - **The first registered account becomes admin** (`routers/auth.py`).
 - **The sprite's persona lives in `backend/data/prompts/sprite.md`**, not in Python, and is
@@ -265,8 +308,11 @@ approval prompt carries the whole risk, so do not weaken it to compensate.
 - `data/shell_allowlist.json` auto-approves only commands that can neither execute arbitrary code
   nor open a socket. `python`, `node`, `git`, `curl`, `find`, `awk` deliberately require approval —
   that is the feature working, not a gap to close.
-- All file paths pass `services/storage_service.py::contained_path()`, shared with public uploads.
-  Fix path logic there, once. **The download routes use the same `Workspace.resolve()` the agent
+- All file paths pass `core/paths.py::contained_path()`, shared with public uploads (which
+  re-exports it from `services/storage_service.py`, where it used to live). Fix path logic there,
+  once. It moved because `harness/sandbox/workspace.py` imported it from `services/`, which
+  dragged `fastapi` in behind it and made `harness/__init__.py`'s "no fastapi below this package"
+  claim false — and blocked `rl/` from importing the harness at all. **The download routes use the same `Workspace.resolve()` the agent
   does** — one containment implementation, not a second one to keep in sync.
 - **Third-party skill packages need a licence check first.** The `anthropics/skills` docx/pptx
   bundles are public but ship a proprietary `LICENSE.txt` that forbids retaining copies outside
@@ -287,7 +333,80 @@ approval prompt carries the whole risk, so do not weaken it to compensate.
   wall-clock caps all sit in `settings` and are checked before the child session row is created.
   A subagent gains no permission its parent lacks — it loses one.
 
+## The RL workbench (`rl/`)
+
+A Deep Research Agentic-RL environment built *on* the Harness: task set, verifiers, concurrent
+multi-turn rollout, token-level loss masks, GRPO. `rl/README.md` is its front door and carries the
+measurements; this section is only what a future session needs in order not to break it.
+
+**Dependency direction is one-way and load-bearing.** `rl/` imports `backend/harness`;
+`backend/` must never import `rl/`. The corpus reader and BM25 index live in
+`backend/harness/corpus/` because they define what the agent *sees* — the tool handler serves them
+at rollout time and the offline pipeline reads them at build time, and one implementation is the
+only way those two can be guaranteed to agree. The training machinery wrapped around them is
+`rl/`. A dependency the other way would put torch in the web server's import graph.
+
+**The environment is data, and the data is hashed.** A reward means nothing except relative to a
+corpus and a preset, so `EnvStamp` (corpus sha256, preset, `max_steps`, model, chat-template
+sha256) is written into every trajectory, and `export_verl.verify()` *refuses* a file mixing two
+stamps. `corpus verify` re-hashes `docs.jsonl` against its manifest. Splits are frozen JSONL with
+their own hashes.
+
+**Three seams are reused rather than reimplemented**, which is what the Harness's Protocols were
+for: `MemorySessionStore` (4 methods) replaces SQLite so a rollout needs no DB and no user row;
+`EvalAdapter` / `PolicyAdapter` replace `OpenAICompatibleAdapter` (whose temperature is hard-coded
+and which has no seed); `rl/env/build.py` constructs `HarnessContext` directly instead of calling
+`build_context()`. The loop, the projection and the event vocabulary are untouched.
+
+### Things that will bite you in `rl/`
+
+- **Never call `compose_prompt()` for a rollout.** It appends `runtime_context()`, which carries
+  *today's date*. A trajectory collected on Tuesday then re-tokenises differently on Wednesday and
+  the loss mask's prefix property breaks. `rl/env/build.py::pinned_system_prompt` exists for this.
+- **Compaction must stay off.** `maybe_compact` runs every step and rewrites the *system* message
+  when it fires, which also breaks the prefix property — silently. The budget is set unreachably
+  high and `assert_no_compaction()` checks the log rather than trusting the budget.
+- **`derive_messages` hands over `tool_calls[].arguments` as raw JSON text**, and Qwen's chat
+  template pipes it through `| tojson`, which double-encodes a string into a JSON string. vLLM
+  normalises server-side, so rollout and a naive local re-tokenisation disagree on every tool call
+  with no error. `rl/env/template.py::normalize()` is the fix and a check stage pins it.
+- **The prefix property that must hold is per-assistant-turn, not per-message.** Qwen merges
+  consecutive `tool` responses into one block, so mid-block prefixes genuinely shift; asserting
+  stability at every message boundary is a false alarm (it failed on all six real trajectories
+  before this was understood).
+- **`<|im_end|>` belongs inside the loss mask.** Trained without it, the policy never learns to stop.
+- **An empty model response is "no verdict", not "the model doesn't know."** Thinking models spend
+  the whole output budget on reasoning at a measurable rate (~18% at a 4096 cap). Scoring those as
+  negative admits leaked questions into the dataset, which is what the leakage filter exists to
+  prevent. Size `max_tokens` off the *tail*, not the average, and treat empties as unknown.
+- **`Teacher.ask_many` separates `EmptyResponseError` from transport failures.** Only the latter
+  counts toward the abort threshold; conflating them killed a healthy 4,834-question sweep at
+  question 1,000.
+- **`group_advantages` exists twice** — pure Python in `rl/train/pack.py` for the loop (so the
+  orchestration is testable without a GPU) and on tensors in `rl/train/grpo.py`. A check stage
+  asserts they agree numerically; if you change one, change both.
+- **`harness/__init__.py` is an eager facade.** Importing *any* harness submodule runs it and pulls
+  in `harness.context` → the DB layer → `core.config`. `rl/train/pack.py` keeps its `Trajectory`
+  import under `TYPE_CHECKING` for exactly this reason.
+- **`engine.run_many` takes a policy *factory*, not an adapter.** Pass `engine.shared(adapter)`
+  to reuse one instance (evaluation) or a factory to get one per episode (training, which needs
+  it: the policy adapter accumulates the per-generation records `logp_old` comes from, and one
+  shared adapter across concurrent episodes interleaves them unattributably). Do not reintroduce
+  duck-typing to tell the two apart — an adapter *class* has a `stream` attribute exactly like an
+  instance does, and that mistake silently passed the class itself as the adapter.
+- **`logp_old` is matched to assistant spans by prompt prefix, never by order.** Concurrent
+  rollouts finish out of order. Partial coverage drops the whole vector so the trainer falls back
+  to a frozen pass (ratio exactly 1) rather than pairing one generation's log-probs with
+  another's tokens.
+- **`load_specs()` is `@lru_cache`d**, so a long-running rollout process will not see an edited
+  tool contract.
+- **The shift convention lives in `grpo.token_logprobs()`.** `logp_old[b, t]` is the log-prob *of*
+  `input_ids[b, t]`. Getting it backwards by one produces a finite loss and a wrong gradient; it
+  was gotten wrong three times before being given a name.
+
 ## README
 
 `README.md` is the user-facing document and is kept current — update it alongside behaviour changes,
-especially the config table and the Harness security section.
+especially the config table and the Harness security section. `rl/README.md` is the same contract
+for the RL workbench: its measurement tables are the project's main claim, so a behaviour change
+that moves a number belongs there too.

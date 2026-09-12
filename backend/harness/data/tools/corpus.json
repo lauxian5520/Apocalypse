@@ -1,0 +1,69 @@
+{
+  "_comment": "The Deep Research environment: read-only search over a frozen corpus, plus the terminal answer action. All three are `read` because the corpus is immutable and offline, so `ApprovalPolicy` auto-approves them and a rollout never stops for a human. Gated by HARNESS_CORPUS_ENABLED, which is false by default — without the gate these would appear in the `standard` preset (tools: [\"*\"]) and the production site's agent would silently gain them.",
+  "tools": [
+    {
+      "name": "corpus_search",
+      "permission": "read",
+      "description": "在冻结的语料中做关键词检索，返回候选条目的编号、标题和正文开头。检索按词匹配；换一种说法重试往往比重复同一句更有用。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "检索关键词。用描述内容的实词，不要整句照抄问题。"
+          },
+          "k": {
+            "type": "integer",
+            "description": "返回条数，默认 5，最多 10"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "corpus_open",
+      "permission": "read",
+      "description": "按编号打开一个条目，返回它的标题、正文全文与附带的结构化信息。编号来自 corpus_search 的结果。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "description": "条目编号，来自 corpus_search 的结果"
+          }
+        },
+        "required": [
+          "doc_id"
+        ]
+      }
+    },
+    {
+      "name": "corpus_answer",
+      "permission": "read",
+      "stops_turn": true,
+      "description": "提交最终答案并结束本轮。answer 只写答案本身，不要写推理过程；答案要尽量短（一个名字、一个年份、yes/no）。citations 必须列出你据以得出答案的条目编号，且必须是你此前真的检索或打开过的。调用后本轮立即结束。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string",
+            "description": "最终答案本身，尽量短。"
+          },
+          "citations": {
+            "type": "array",
+            "description": "支撑该答案的条目编号列表",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "answer",
+          "citations"
+        ]
+      }
+    }
+  ]
+}

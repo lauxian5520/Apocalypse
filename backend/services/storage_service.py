@@ -12,6 +12,11 @@ from fastapi import UploadFile
 
 from core.config import get_settings
 from core.errors import ValidationError
+# Re-exported, not redefined: the implementation moved to `core/paths.py` so
+# `harness/` can reach it without importing this module — and with it `fastapi`.
+# Every caller that already said `from services.storage_service import
+# contained_path` keeps working.
+from core.paths import contained_path  # noqa: F401
 
 settings = get_settings()
 
@@ -183,21 +188,6 @@ def delete_file(directory: str, filename: str) -> None:
         os.remove(path)
 
 
-def contained_path(root: str, relative: str) -> str | None:
-    """Resolve `relative` inside `root`, or None when it escapes.
-
-    The single containment check in this codebase: uploads serve from it and
-    the harness sandbox jails its tools with it. Symlinks are resolved before
-    the comparison, so a link pointing outside `root` is rejected too.
-    """
-    safe = os.path.normpath(relative).lstrip("/\\")
-    real_root = os.path.realpath(root)
-    target = os.path.realpath(os.path.join(real_root, safe))
-    # Compare on a path-component boundary: a bare startswith() would also
-    # accept a sibling directory such as "<uploads>_backup".
-    if target != real_root and not target.startswith(real_root + os.sep):
-        return None
-    return target
 
 
 def resolve_public_path(filename: str) -> str | None:

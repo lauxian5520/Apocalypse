@@ -1,0 +1,40 @@
+# Training dependencies — the rented GPU box only.
+#
+# Install on top of rl/requirements.txt:
+#     pip install -r rl/requirements.txt -r rl/requirements-trainer.txt
+#
+# Never install these on a machine without a GPU: torch has no useful wheel for
+# aarch64-without-CUDA, and resolving one takes longer than the corpus build.
+#
+# ── About the version specifiers ─────────────────────────────────────
+# Floors, not exact pins. An earlier version of this file pinned exact releases
+# chosen from memory (`torch==2.6.0`, `vllm==0.8.5`) — neither exists on PyPI,
+# so `pip install` failed outright. Pinning a version nobody has tested is not
+# reproducibility, it is false precision.
+#
+# What is actually load-bearing is a small set of *features*, listed below. Any
+# release providing them works; the floors are the earliest ones known to.
+#
+#   vLLM must support:
+#     - `prompt` as a list of token ids on /v1/completions
+#       (rl/env/policy_adapter.py sends token ids so the server never applies a
+#        chat template — see course/18)
+#     - `logprobs` on /v1/completions, so `logp_old` is recorded at sampling time
+#     - runtime LoRA: /v1/load_lora_adapter and /v1/unload_lora_adapter, with
+#       VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 set on the server
+#
+#   transformers must support:
+#     - `apply_chat_template(..., tools=[...])`
+#     The return type of `tokenize=True` changed between 4.x (list) and 5.x
+#     (BatchEncoding); `rl/env/template.py::encode` handles both.
+#
+# Developed and verified against transformers 5.17.0 / tokenizers 0.23.2 on the
+# tokenization side. The training path has not been run on a GPU in this
+# repository — `python -m rl.train.run_grpo --smoke` is the first thing to run
+# on the box, precisely because of that.
+
+torch>=2.9
+transformers>=4.51
+vllm>=0.27
+peft>=0.15
+accelerate>=1.6

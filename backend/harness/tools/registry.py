@@ -36,6 +36,7 @@ BUILTIN_DIR = Path(__file__).resolve().parent / "builtin"
 _MODULE_GATES = {
     "shell": "harness_shell_enabled",
     "subagent": "harness_subagent_enabled",
+    "corpus": "harness_corpus_enabled",
 }
 
 # Loader-internal key: where this definition's system prompt file lives.

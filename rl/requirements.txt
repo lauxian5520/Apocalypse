@@ -1,0 +1,39 @@
+# 天启·深研场 — the corpus / synthesis / rollout / eval side.
+#
+# Deliberately separate from backend/requirements.txt: nothing here may end up
+# in the web server's import graph, and torch has no business in a Docker image
+# that serves a personal website.
+#
+# Target Python 3.11 or 3.12. NOT 3.14 — `scipy` and `tokenizers` have no
+# cp314 aarch64 wheels at the time of writing, and the default `python3` on the
+# development Pi is a 3.14 conda base. Use the `py311` env, or:
+#
+#     conda create -n apocalypse-rl python=3.12 && conda activate apocalypse-rl
+#     pip install -r rl/requirements.txt
+#
+# ── Inherited from backend/harness, not chosen here ──────────────────
+# `rl/` imports `backend/harness`, and importing any harness submodule runs
+# `harness/__init__.py`, which reaches `harness.context` -> `SqliteSessionStore`
+# -> `core.database`. `ToolRegistry` additionally imports *every* module named
+# by a tool contract regardless of preset, which pulls in `builtin/web.py`.
+# So these are not optional, and pretending `rl/` is standalone would just make
+# the first `ImportError` confusing. All are pure-Python wheels.
+sqlalchemy>=2.0          # harness.session.sqlite_store, via harness/__init__
+pydantic-settings>=2.3.0 # core.config.Settings
+python-dotenv>=1.0.0     # core.config reads the repo .env
+httpx>=0.27.0            # harness/tools/builtin/web.py
+beautifulsoup4>=4.12.0   # harness/tools/builtin/web.py
+
+# ── Phase 1-3: corpus, synthesis, rollout, eval (Pi-runnable, no GPU) ──
+# BM25 is hand-rolled in harness/corpus/index.py rather than taken from bm25s
+# or Pyserini: the index is part of the environment definition, so a library
+# upgrade silently changing tokenization would silently change the task and
+# invalidate every number already reported. That is why nothing appears here
+# for retrieval.
+#
+# The corpus builder, the adversarial filter and the verifiers are standard
+# library only, on purpose — Phase 1 has to run on a Raspberry Pi.
+
+# ── Phase 4-5: training. GPU box only ────────────────────────────────
+# Kept in a second file so the Pi never tries to resolve a torch wheel:
+#     pip install -r rl/requirements-trainer.txt

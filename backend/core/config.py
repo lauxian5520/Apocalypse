@@ -91,6 +91,17 @@ class Settings(BaseSettings):
     harness_workspace_quota_mb: int = 64
     harness_search_url: str = ""         # blank uses the built-in DuckDuckGo endpoint
 
+    # The Deep Research RL environment. Off by default, and that default is the
+    # whole point: `standard` asks for `tools: ["*"]`, so without the gate in
+    # `ToolRegistry._MODULE_GATES` the corpus tools would appear in the live
+    # site's agent the moment the contract file exists. The corpus is a build
+    # artifact of `rl/`, not web-app state, so its directory is resolved against
+    # the repository root rather than VAR_DIR and is deliberately absent from
+    # `runtime_dirs` — nothing creates it, and the tools degrade with a message
+    # when it is missing.
+    harness_corpus_enabled: bool = False
+    harness_corpus_dir: str = "rl/data/corpus"
+
     # Subagents. Every knob here is a spend limit: a delegated run costs real
     # tokens and nobody is watching it turn by turn.
     harness_subagent_enabled: bool = True
@@ -125,6 +136,9 @@ class Settings(BaseSettings):
         for field, relative in defaults.items():
             configured = getattr(self, field)
             setattr(self, field, resolve(configured or relative, base=Path(self.var_dir)))
+        # Resolved against the repository root, not VAR_DIR: the corpus is an
+        # input built by `rl/`, not runtime state the deployment owns.
+        self.harness_corpus_dir = resolve(self.harness_corpus_dir or "rl/data/corpus")
         return self
 
     @property
