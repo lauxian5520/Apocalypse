@@ -39,6 +39,37 @@ os.environ.setdefault("HARNESS_CORPUS_ENABLED", "true")
 PASS, FAIL, SKIP = "PASS", "FAIL", "SKIP"
 _results: list[tuple[str, str, str]] = []
 
+# Six real trajectories ship with the repository so the tokenisation, mask,
+# SFT-selection, ablation and export stages run on a fresh clone. Freshly
+# recorded ones under `rl/data/trajectories/` take precedence when present.
+FIXTURE_TRAJECTORIES = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "fixtures", "trajectories.jsonl")
+
+
+class SkipCheck(Exception):
+    """A prerequisite is absent, which is not the same as a failure.
+
+    `--offline` and a missing torch are already reported as SKIP; "no
+    trajectories recorded yet" belongs in the same category. Reporting it as
+    FAIL would leave someone unable to tell a broken repository from one that
+    needs one more command.
+    """
+
+
+def trajectory_paths() -> list[str]:
+    """Where to read trajectories from, freshest first."""
+    import glob
+
+    recorded = sorted(glob.glob(
+        os.path.join(REPO_ROOT, "rl", "data", "trajectories", "*.jsonl")))
+    if recorded:
+        return recorded
+    if os.path.isfile(FIXTURE_TRAJECTORIES):
+        return [FIXTURE_TRAJECTORIES]
+    raise SkipCheck(
+        "没有可用轨迹。录一批：python -m rl.cli rollout -n 6 "
+        "--out rl/data/trajectories/smoke.jsonl")
+
 
 def _width(text: str) -> int:
     return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in text)
@@ -66,6 +97,9 @@ async def stage(name: str, fn) -> bool:
         if inspect.isawaitable(detail):
             detail = await detail
         record(name, PASS, detail or "")
+        return True
+    except SkipCheck as e:
+        record(name, SKIP, str(e))
         return True
     except Exception as e:                       # noqa: BLE001 - report, never abort
         record(name, FAIL, f"{e.__class__.__name__}: {e}")
@@ -347,19 +381,12 @@ def check_arguments_normalisation() -> str:
 
 def check_loss_mask() -> str:
     """The mask construction, over trajectories recorded by a real rollout."""
-    import glob
-
     from harness.tools.registry import ToolRegistry
     from rl.env import template
     from rl.env.build import PRESET
     from rl.rollout.trajectory import read_jsonl
 
-    paths = sorted(glob.glob(os.path.join(REPO_ROOT, "rl", "data", "trajectories", "*.jsonl")))
-    if not paths:
-        raise AssertionError(
-            "没有录制好的轨迹可查（rl/data/trajectories/*.jsonl）。"
-            "先跑 python -m rl.cli rollout -n 6 --out rl/data/trajectories/smoke.jsonl"
-        )
+    paths = trajectory_paths()
 
     tools = ToolRegistry(PRESET).schemas()
     checked = spans = trainable = total = 0
@@ -517,14 +544,10 @@ def check_grpo_loss() -> str:
 
 def check_sft_selection() -> str:
     """Rejection sampling keeps only what the verifier passed."""
-    import glob
-
     from rl.rollout.trajectory import read_jsonl
     from rl.train import sft
 
-    paths = sorted(glob.glob(os.path.join(REPO_ROOT, "rl", "data", "trajectories", "*.jsonl")))
-    if not paths:
-        raise AssertionError("没有录制好的轨迹（rl/data/trajectories/*.jsonl）")
+    paths = trajectory_paths()
     trajectories = [t for p in paths for t in read_jsonl(p)]
 
     kept, funnel = sft.select(trajectories)
@@ -552,17 +575,15 @@ def check_sft_selection() -> str:
 
 def check_attribution() -> str:
     """Context ablation removes the evidence, not just the id."""
-    import glob
-
     from rl.attribution import loo
     from rl.rollout.trajectory import read_jsonl
     from rl.verifiers.trace import extract
 
-    paths = sorted(glob.glob(os.path.join(REPO_ROOT, "rl", "data", "trajectories", "*.jsonl")))
+    paths = trajectory_paths()
     trajectories = [t for p in paths for t in read_jsonl(p) if t.ok]
     candidates = [t for t in trajectories if extract(t.session_events()).citations]
     if not candidates:
-        raise AssertionError("没有带引用的轨迹可用于消融检查")
+        raise SkipCheck("可用轨迹里没有带引用的，跳过消融检查")
 
     trajectory = candidates[0]
     log = trajectory.session_events()
@@ -604,16 +625,13 @@ def check_attribution() -> str:
 
 def check_export() -> str:
     """Both export formats round-trip, and a mixed environment is rejected."""
-    import glob
     import json as _json
     import tempfile
 
     from rl.rollout.trajectory import read_jsonl
     from rl.train import export_verl
 
-    paths = sorted(glob.glob(os.path.join(REPO_ROOT, "rl", "data", "trajectories", "*.jsonl")))
-    if not paths:
-        raise AssertionError("没有录制好的轨迹（rl/data/trajectories/*.jsonl）")
+    paths = trajectory_paths()
     trajectories = [t for p in paths for t in read_jsonl(p)]
 
     summary = {}
@@ -749,7 +767,6 @@ def check_training_loop() -> str:
     group's outcomes, and that the health warnings fire.
     """
     import copy
-    import glob
     import random
 
     from rl.rollout.trajectory import read_jsonl
@@ -757,9 +774,7 @@ def check_training_loop() -> str:
     from rl.train import metrics as metrics_mod
     from rl.train.loop import LoopConfig, all_zero_fraction, run
 
-    paths = sorted(glob.glob(os.path.join(REPO_ROOT, "rl", "data", "trajectories", "*.jsonl")))
-    if not paths:
-        raise AssertionError("没有录制好的轨迹（rl/data/trajectories/*.jsonl）")
+    paths = trajectory_paths()
     real = [t for p in paths for t in read_jsonl(p) if t.ok]
     tasks = split_mod.load(os.path.join(REPO_ROOT, "rl", "data", "splits"), "train")[:30]
 
@@ -891,17 +906,13 @@ def check_logprob_placement() -> str:
     one generation's log-probs with another's tokens: the ratio is then garbage,
     the loss is still finite, and nothing reports it.
     """
-    import glob
-
     from harness.tools.registry import ToolRegistry
     from rl.env import template
     from rl.env.build import PRESET
     from rl.rollout.trajectory import read_jsonl
     from rl.train import pack as packer
 
-    paths = sorted(glob.glob(os.path.join(REPO_ROOT, "rl", "data", "trajectories", "*.jsonl")))
-    if not paths:
-        raise AssertionError("没有录制好的轨迹（rl/data/trajectories/*.jsonl）")
+    paths = trajectory_paths()
     trajectory = next(t for p in paths for t in read_jsonl(p) if t.ok)
 
     tools = ToolRegistry(PRESET).schemas()

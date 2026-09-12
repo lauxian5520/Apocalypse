@@ -14,6 +14,8 @@ data/corpus/bm25_index.json
 data/corpus/*.partial
 
 # ── Run outputs ──────────────────────────────────────────────────────
+# `rl/checks/fixtures/trajectories.jsonl` is the committed counterpart: six real
+# trajectories (~80 KB) so the mask/export/ablation stages run on a fresh clone.
 data/trajectories/
 data/sft/
 data/adapters/
