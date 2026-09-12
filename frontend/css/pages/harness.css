@@ -177,8 +177,15 @@ body { padding-top: 80px; }
     word-break: break-all;
     color: var(--text-2);
     margin: .5rem 0 0;
-    max-height: 320px;
-    overflow-y: auto;
+    /* A long search result used to be a 320px porthole with no way out.
+       No `max-height` here: it would clamp the inline height `resize` writes, so the
+       box could be dragged smaller but never larger. The starting height is set
+       per box by `sizeOutput()` in harness.js, which only pins one when the
+       content actually overflows — short output keeps `height: auto` and takes
+       just the room it needs. */
+    min-height: 4.5rem;
+    overflow: auto;
+    resize: vertical;
 }
 
 .hs-approval-actions { display: flex; gap: .5rem; padding: 0 .7rem .7rem; }
@@ -258,8 +265,9 @@ body { padding-top: 80px; }
     white-space: pre-wrap;
     word-break: break-all;
     margin-top: .25rem;
-    max-height: 240px;
-    overflow-y: auto;
+    min-height: 3rem;
+    overflow: auto;
+    resize: vertical;
 }
 
 .hs-fork {
@@ -353,6 +361,27 @@ body { padding-top: 80px; }
     font-size: .66rem;
     color: #8b95c4;
 }
+
+/* ── wide mode ───────────────────────────────────────────────── */
+/* Toggled by the 宽屏 button; `harness.js` puts `hs-wide` on <body> and
+   remembers it. Three separate caps squeeze the trajectory, and widening the
+   column alone does not lift any of them:
+     1. the page is centred inside 1600px
+     2. message bubbles stop at 88% of the column
+     3. tool output opens 320px tall
+   Wide mode addresses all three at once, so it is one button rather than
+   three sliders. */
+body.hs-wide .page-wrap { max-width: none; padding-left: 1rem; padding-right: 1rem; }
+body.hs-wide .hs-msg,
+body.hs-wide .hs-tool-approval { max-width: 100%; width: auto; }
+body.hs-wide { --hs-output-height: 60vh; --hs-event-height: 50vh; }
+
+/* Make the grab affordance visible: a corner handle is easy to miss on a dark
+   panel, and an output box that looks fixed will not be dragged. */
+.hs-tool-body pre,
+.hs-event-json { border-bottom: 1px dashed var(--border); }
+.hs-tool-body pre:hover,
+.hs-event-json:hover { border-bottom-color: var(--accent, #6ea8ff); }
 
 /* ── resizable columns ───────────────────────────────────────── */
 /* `js/widgets/split-pane.js` inserts one `.split-handle` between each pair of
