@@ -353,3 +353,46 @@ body { padding-top: 80px; }
     font-size: .66rem;
     color: #8b95c4;
 }
+
+/* ── resizable columns ───────────────────────────────────────── */
+/* `js/widgets/split-pane.js` inserts one `.split-handle` between each pair of
+   panes and rewrites `grid-template-columns` to include a track for each. The
+   widths above stay as the defaults the handle double-click resets to, and as
+   the layout for anyone with JS disabled. */
+.split-handle {
+    align-self: stretch;
+    border-radius: 3px;
+    cursor: col-resize;
+    position: relative;
+    background: transparent;
+    transition: background .15s ease;
+    /* The grid track is only 6px, but a 6px grab target is unpleasant to hit.
+       The pseudo-element widens the *hit area* without widening the column. */
+}
+.split-handle::after {
+    content: '';
+    position: absolute;
+    inset: 0 -4px;
+}
+.split-handle:hover,
+.hs-layout.split-dragging .split-handle {
+    background: var(--accent, #6ea8ff);
+    opacity: .55;
+}
+/* While dragging, stop the panes from selecting text or swallowing the pointer
+   — without this a drag across the conversation highlights every message. */
+.hs-layout.split-dragging {
+    user-select: none;
+    cursor: col-resize;
+}
+.hs-layout.split-dragging .hs-sidebar,
+.hs-layout.split-dragging .hs-main,
+.hs-layout.split-dragging .hs-inspector {
+    pointer-events: none;
+}
+
+@media (max-width: 1200px) {
+    /* The grid is stacked here; a vertical divider would be meaningless.
+       split-pane.js also hides them, this is the no-JS belt. */
+    .split-handle { display: none; }
+}
