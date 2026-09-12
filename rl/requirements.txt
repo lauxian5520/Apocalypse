@@ -24,6 +24,13 @@ python-dotenv>=1.0.0     # core.config reads the repo .env
 httpx>=0.27.0            # harness/tools/builtin/web.py
 beautifulsoup4>=4.12.0   # harness/tools/builtin/web.py
 
+# ── Reading the task source ─────────────────────────────────────────
+# HotpotQA ships as parquet on the Hub, so `rl/corpus/hotpot.py` needs an
+# Arrow reader. Declared here rather than assumed: the first clone test passed
+# only because the machine happened to have it, and a clean environment would
+# have failed at `corpus hotpot` — the very first command in the quickstart.
+pyarrow>=14.0
+
 # ── Phase 1-3: corpus, synthesis, rollout, eval (Pi-runnable, no GPU) ──
 # BM25 is hand-rolled in harness/corpus/index.py rather than taken from bm25s
 # or Pyserini: the index is part of the environment definition, so a library
