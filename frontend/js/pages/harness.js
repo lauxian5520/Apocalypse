@@ -457,6 +457,20 @@
             usage: el('hs-usage'), tabBody: el('hs-tab-body'),
         });
 
+        // Make the three columns draggable. The sizes here are the CSS
+        // defaults, so double-clicking a divider returns to the stylesheet's
+        // layout; the middle track stays `1fr` so the conversation absorbs
+        // every window resize rather than overflowing.
+        window.SplitPane?.make({
+            id: 'harness',
+            grid: '.hs-layout',
+            tracks: [
+                { size: 260, min: 180 },     // session list
+                { flexible: true, min: 320 },  // conversation
+                { size: 380, min: 260 },     // inspector
+            ],
+        });
+
         // Auth.init() resolves asynchronously; reading the user directly races
         // with it and tells a logged-in user they are not.
         const user = window.Auth?.user?.() || await window.Auth?.init?.();
