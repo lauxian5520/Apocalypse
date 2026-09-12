@@ -1,0 +1,50 @@
+# What is and is not committed, and why.
+#
+# The rule is cost of regeneration, not size. Anything a `git clone` can rebuild
+# in minutes with no API spend stays out; anything that cost money, hours, or a
+# provider that may not answer the same way twice goes in.
+
+# ── Rebuildable in ~3 minutes, no API, deterministic ─────────────────
+#     python -m rl.cli corpus hotpot --split validation && python -m rl.cli corpus index
+# 79 MB + 40 MB. The manifest (with its sha256) IS committed, so a rebuild can
+# be verified against the corpus every reported number was measured on.
+data/corpus/docs.jsonl
+data/corpus/tasks.jsonl
+data/corpus/bm25_index.json
+data/corpus/*.partial
+
+# ── Run outputs ──────────────────────────────────────────────────────
+data/trajectories/
+data/sft/
+data/adapters/
+data/metrics/
+data/_downloads/
+data/corpus_pilot/
+data/corpus_arxiv50k/
+
+# ── Tokenizer binaries: ~11 MB, re-downloadable from the Hub ─────────
+# `rl/env/qwen2.5_tool.jinja` — the chat template — is committed on purpose:
+# HF updates templates in place, and a silent change would invalidate every
+# trajectory already collected. The vocabulary cannot drift the same way.
+env/qwen25/
+
+__pycache__/
+*.egg-info/
+
+# ── Explicitly kept, despite living under data/ ──────────────────────
+# Negations must come last to override the directory patterns above.
+#
+# leakage/*.jsonl   — ~11k closed-book verdicts over two models. Cost real API
+#                     spend and hours of wall clock, and a provider will not
+#                     necessarily answer the same way next month. Losing these
+#                     means the splits cannot be reproduced at all.
+# splits/           — the frozen train/dev/test with their sha256. A number is
+#                     only meaningful against a named split.
+# corpus/manifest   — pins which corpus everything was measured on.
+# one_query.*.json  — 7,405 BM25 probes, ~10 minutes to recompute.
+!data/leakage/
+!data/leakage/*.jsonl
+!data/splits/
+!data/splits/*
+!data/corpus/manifest.json
+!data/corpus/one_query.*.json

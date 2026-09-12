@@ -1,0 +1,13 @@
+{
+  "built_at": "2026-09-12T01:54:39+00:00",
+  "doc_count": 66581,
+  "docs_sha256": "3948151a67ec5f21baa3c2a00bd15c2397cbe0cbf98b951d8908bb6d06b63e89",
+  "params": {
+    "licence": "CC BY-SA 4.0",
+    "split": "validation"
+  },
+  "source": "hotpotqa-distractor",
+  "task_count": 7405,
+  "tasks_sha256": "84e74c082c3e668187b2ef08d32ee3ebd68e87f1846842a120782849e393c6e8",
+  "version": 1
+}

@@ -1,8 +1,8 @@
 """Per-session workspace: the only directory a session's tools can see.
 
-Containment reuses `services.storage_service.contained_path`, the same check
-that guards public uploads — one implementation, so a fix to the path logic
-protects both surfaces.
+Containment reuses `core.paths.contained_path`, the same check that guards
+public uploads (which re-exports it from `services.storage_service`) — one
+implementation, so a fix to the path logic protects both surfaces.
 """
 import logging
 import os
@@ -10,7 +10,7 @@ import shutil
 
 from core.config import get_settings
 from core.errors import ValidationError
-from services.storage_service import contained_path
+from core.paths import contained_path
 
 settings = get_settings()
 logger = logging.getLogger(__name__)

@@ -62,6 +62,8 @@
 
 ```
 Apocalypse/
+├── rl/                       # 深研场：Deep Research 的 Agentic RL 环境与训练（见 rl/README.md）
+│                             #   单向依赖 backend/harness；backend/ 永不 import rl/
 ├── backend/                  # 后端代码（只读，不含任何运行时数据）
 │   ├── main.py               # 应用装配：中间件 → 异常处理 → 路由 → 静态文件
 │   ├── core/                 # 基础设施：谁都可以依赖，它不依赖任何人
@@ -355,6 +357,14 @@ cd backend && python ../tools/harness_check.py --url http://localhost:8000 --tok
   ✓ 事件日志与消息投影          3 条事件 → 4 条消息 ['system', 'user', 'assistant', 'tool']
 ```
 
+**RL 环境自检** —— 语料哈希、检索确定性、动作空间、两种 store 的投影一致性、
+验证器用例、分词前缀性质与 loss mask、GRPO 目标函数，同样是分段自检、失败非零退出：
+
+```bash
+python -m rl.checks.rl_check --offline      # 11 个离线阶段，不花 token
+python -m rl.checks.rl_check                # 再加一次真实 rollout
+```
+
 **跑一整轮** —— 不经浏览器执行一次真实任务，打印事件日志、投影出的消息、用量与工作区文件：
 
 ```bash
@@ -421,6 +431,8 @@ docker compose up -d
 | `HARNESS_SUBAGENT_MAX_PER_SESSION` | 每个会话最多派发几次 | `16` |
 | `HARNESS_SUBAGENT_MAX_STEPS` | 单次子运行的步数上限 | `8` |
 | `HARNESS_SUBAGENT_TIMEOUT_SECONDS` | 单次子运行的墙钟上限 | `300` |
+| `HARNESS_CORPUS_ENABLED` | 是否启用 `corpus_*` 检索工具（RL 环境用）。**默认 `false`，线上站点行为不变** | `false` |
+| `HARNESS_CORPUS_DIR` | 冻结语料目录，相对仓库根（不是 `VAR_DIR`，它是构建产物不是运行时状态） | `rl/data/corpus` |
 
 ### 接入其他模型
 

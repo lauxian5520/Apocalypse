@@ -1,0 +1,12 @@
+{
+  "sha256": {
+    "dev": "3e4889294e5b705c9afc036f9f5bae31cfc4f3b296b17b386756014c7c6cac6b",
+    "test": "c12c6b0b7e7bf2f50cce86df7c20bbc737768851b5f2f870a7c9be8cb73e3a09",
+    "train": "b7b4863cd2049c7b41b147d142e312572ec0a69869007af5788534e4c295921f"
+  },
+  "sizes": {
+    "dev": 457,
+    "test": 459,
+    "train": 1908
+  }
+}

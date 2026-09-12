@@ -1,0 +1,14 @@
+{
+  "_comment": "The Deep Research RL environment. The tool list is explicit rather than a wildcard on purpose: this preset defines a task, and a task whose action space changes when someone drops in a new tool is not reproducible. Every result the project reports names this preset and a corpus hash; both have to be pinned for that pair to mean anything. max_steps is the environment's episode limit — changing it changes the task.",
+  "name": "deepresearch",
+  "label": "深研场",
+  "description": "冻结论文语料上的多跳检索任务环境，用于 RL 训练与评测。只有检索、打开与作答三个动作，不联网、不读写文件。",
+  "system_prompt": "deepresearch.md",
+  "max_steps": 12,
+  "tools": [
+    "corpus_search",
+    "corpus_open",
+    "corpus_answer"
+  ],
+  "skills": []
+}
