@@ -60,6 +60,12 @@ def _cmd_corpus_build(args: argparse.Namespace) -> int:
 
 def _cmd_corpus_hotpot(args: argparse.Namespace) -> int:
     """Build the corpus and task set from HotpotQA's distractor split."""
+    from rl.train import preflight
+
+    # First command in the quickstart; a bare ModuleNotFoundError here is a
+    # terrible first impression of the repository.
+    preflight.require_corpus()
+
     from rl.corpus import hotpot
 
     cache = os.path.join(REPO_ROOT, "rl", "data", "_downloads")

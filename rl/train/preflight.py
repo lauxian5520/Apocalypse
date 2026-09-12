@@ -24,6 +24,10 @@ ROLLOUT_DEPS = (
     ("httpx", "httpx", "调用 provider / vLLM"),
 )
 
+CORPUS_DEPS = (
+    ("pyarrow", "pyarrow", "读 HotpotQA 的 parquet"),
+)
+
 
 def _missing(deps):
     out = []
@@ -58,6 +62,10 @@ def require_training() -> None:
 
 def require_rollout() -> None:
     require(ROLLOUT_DEPS, "Rollout")
+
+
+def require_corpus() -> None:
+    require(CORPUS_DEPS, "语料构建")
 
 
 def describe_device(device: str) -> str:
