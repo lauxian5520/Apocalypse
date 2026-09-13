@@ -2,7 +2,14 @@
    Prefix every class with hs- so the three-pane workbench cannot collide with
    the shared component classes in base.css. */
 
-body { padding-top: 80px; }
+body {
+    padding-top: 80px;
+    /* How tall a tool-output box opens at, read by `sizeOutput()` in
+       harness.js. Lives here rather than in JS so wide mode can raise it by
+       overriding one custom property. Only a box whose content overflows this
+       gets a pinned height at all — short output keeps `height: auto`. */
+    --hs-output-height: 320px;
+}
 
 .page-wrap {
     max-width: 1600px;
@@ -18,9 +25,15 @@ body { padding-top: 80px; }
     display: grid;
     grid-template-columns: 260px minmax(0, 1fr) 380px;
     gap: 1rem;
-    /* Fill the viewport below the fixed header so each pane scrolls on its own
-       rather than the page growing to the height of the longest one. */
-    height: calc(100vh - 110px);
+    /* Fill the viewport below the fixed header *exactly* — the default layout
+       is one screen, and anything larger is the reader's own drag. Everything
+       above and below the workbench, summed once here: a hand-tuned number
+       drifts the moment one of them changes, and the symptom is a permanent
+       18px scrollbar nobody can find the cause of. */
+    --hs-chrome: calc(80px   /* body padding-top, clearing the fixed header */
+                    + 1rem   /* .page-wrap padding-top */
+                    + 2rem); /* .page-wrap padding-bottom */
+    height: calc(100vh - var(--hs-chrome));
     min-height: 480px;
 }
 
@@ -385,7 +398,7 @@ body { padding-top: 80px; }
 body.hs-wide .page-wrap { max-width: none; padding-left: 1rem; padding-right: 1rem; }
 body.hs-wide .hs-msg,
 body.hs-wide .hs-tool-approval { max-width: 100%; width: auto; }
-body.hs-wide { --hs-output-height: 60vh; --hs-event-height: 50vh; }
+body.hs-wide { --hs-output-height: 60vh; }
 
 /* Make the grab affordance visible: a corner handle is easy to miss on a dark
    panel, and an output box that looks fixed will not be dragged. */
@@ -504,8 +517,18 @@ body.hs-wide { --hs-output-height: 60vh; --hs-event-height: 50vh; }
    conversation was left showing a single line. Below this height the chrome
    gives way instead of the content. */
 @media (max-height: 620px) {
-    .hs-layout { height: auto; min-height: 0; }
-    .hs-main { height: auto; min-height: 60vh; }
+    /* Drop the 480px floor, but keep the layout inside the viewport. Letting it
+       grow instead turned a short *wide* window (1600x620, a split screen) into
+       a three-screen page — the stacked narrow layout above already sets
+       `height: auto`, which is where growing is the right answer. */
+    .hs-layout { min-height: 0; }
+    /* Release the conversation's floor too. Below ~500px the track it sits in
+       is smaller than 8rem, and a floor larger than its own track does not
+       win room — it overflows downward across the divider and the composer.
+       Nothing is lost by dropping it: the composer's own `min: 64` in
+       split-pane.js is what actually stops the conversation being squeezed,
+       and the grid hands it everything the other three rows do not take. */
+    .hs-conversation { min-height: 0; }
     .hs-main-head { padding-bottom: .4rem; }
     .hs-subtitle { display: none; }
     .hs-input { min-height: 40px; }

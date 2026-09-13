@@ -145,6 +145,13 @@ Enforced by convention, not tooling — respect it:
   shorter navs, and `login/register` have none.
 - `base.css` does **not** provide `body { padding-top: 80px }` or `.page-wrap` — each
   `css/pages/*.css` declares them itself.
+- **The Harness workbench is sized to exactly one viewport**, and the sum of everything above
+  and below it lives once in `--hs-chrome` (`harness.css`). It was a hand-tuned `110px` against
+  a real 128px, which is a permanent 18px scrollbar whose cause is invisible. Keep it derived
+  from the same literals. For the same reason a pane's `min-height` must never exceed the grid
+  track it sits in: a floor bigger than its track does not win room, it overflows downward
+  across whatever is below — which is why `.hs-conversation` releases its floor under
+  `@media (max-height: 620px)`.
 - **The JWT is HttpOnly and unreadable from JS.** `Auth.token()` returns the sentinel string
   `'__cookie__'` so `if (Auth.token())` reads naturally — it is not a credential. Use `apiFetch()`
   (adds the CSRF header automatically); it returns JSON only, so **streaming endpoints need a bare
