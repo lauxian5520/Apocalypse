@@ -315,6 +315,14 @@ Non-obvious behaviour learned the hard way, all commented at the relevant code:
 - **Thinking models (`deepseek-v4-pro`) spend the output budget on reasoning before emitting text.**
   Short-output calls need generous `max_tokens`; `complete()` raises rather than returning an empty
   string when the cap is hit, because a silent `""` hid a broken feature.
+- **A model's tool arguments are text, and `write` is where that bites.** File content is mostly
+  newlines and models routinely emit real ones inside the JSON string instead of escaping them;
+  `parse_arguments` retries with `strict=False` so a `write` is not failed over a quoting detail
+  the model cannot see. Truncation is the other failure and is *not* recoverable — the output cap
+  ended the call mid-arguments so the string never closes. It must be named as truncation, or the
+  model rewrites the same too-long file and is cut off again. `HARNESS_MAX_TOKENS` is that cap
+  (4096 truncates any real file; the default is 8192). The two are told apart by the decode error:
+  an unterminated string, or a position at end-of-input, means the arguments stopped arriving.
 - **Streamed chunks are batched** (`CHUNK_FLUSH_SIZE` / `CHUNK_FLUSH_SECONDS`) — one commit per
   token cost roughly a fifth of a long turn's wall clock.
 - The system prompt carries the current **date only** — second precision would invalidate the

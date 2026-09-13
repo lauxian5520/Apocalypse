@@ -272,17 +272,52 @@ def _gated_off(module: str) -> bool:
 
 
 def parse_arguments(raw: str) -> dict:
-    """Decode the JSON string a model wrote as a call's arguments."""
+    """Decode the JSON string a model wrote as a call's arguments.
+
+    Two different failures arrive here and they need different answers.
+
+    A model writing a file routinely puts real newlines and tabs inside the
+    JSON string instead of escaping them — `write` is where this shows up,
+    because file content is mostly newlines. That is invalid JSON by the
+    letter of the spec and Python rejects it, but it is unambiguous, so parse
+    it again with `strict=False` rather than failing the call over a quoting
+    detail the model cannot see in its own output.
+
+    Truncation is the other one and it is not recoverable here: the output
+    budget ended the stream mid-arguments, so the string never closes.
+    Reporting that as "not valid JSON" sends the model straight back to
+    rewriting the same too-long file and it is cut off again. Name the cause
+    and say what would actually work.
+    """
     text = (raw or "").strip()
     if not text:
         return {}
     try:
         args = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise ValidationError(f"参数不是合法 JSON：{e}")
+    except json.JSONDecodeError:
+        try:
+            args = json.loads(text, strict=False)   # literal newlines and tabs
+        except json.JSONDecodeError as e:
+            raise ValidationError(_argument_error(text, e))
     if not isinstance(args, dict):
         raise ValidationError("参数必须是一个 JSON 对象")
     return args
+
+
+def _argument_error(text: str, e: json.JSONDecodeError) -> str:
+    """Tell a cut-off call apart from a genuinely malformed one.
+
+    A string that never closes, or a decode that runs off the end of the
+    input, means the arguments stopped arriving. A syntax error anywhere
+    before the end is the model's mistake, not the budget's.
+    """
+    if e.msg.startswith("Unterminated string") or e.pos >= len(text.rstrip()):
+        return (
+            f"参数在第 {len(text)} 个字符处戛然而止（{e.msg}），说明这次调用的输出"
+            "超过了单次上限、被截断了，不是写错了格式。请不要原样重试："
+            "把内容拆成几次较小的调用（先写一部分，再用 edit 逐段追加）。"
+        )
+    return f"参数不是合法 JSON：{e}"
 
 
 def _reject_unknown_arguments(spec: ToolSpec, args: dict) -> None:
