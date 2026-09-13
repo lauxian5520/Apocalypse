@@ -19,6 +19,7 @@
         tab: 'events',
         running: false,
         search: '',
+        wide: false,
     };
 
     // ── session list ─────────────────────────────────────────
@@ -103,6 +104,7 @@
         }
         dom.conversation.innerHTML = '';
         state.events.forEach(appendEvent);
+        sizeOutput(dom.conversation);
         scrollDown();
     }
 
@@ -166,6 +168,9 @@
             const body = node.querySelector('.hs-tool-body');
             body.classList.toggle('hs-hidden');
             node.querySelector('.hs-caret').textContent = body.classList.contains('hs-hidden') ? '▸' : '▾';
+            // A hidden element reports scrollHeight 0, so the box can only be
+            // measured once it is on screen.
+            if (!body.classList.contains('hs-hidden')) sizeOutput(body);
         });
         return node;
     }
@@ -345,10 +350,9 @@
         } else {
             T.renderPlugins(dom.tabBody, state.registry);
         }
+        sizeOutput(dom.tabBody);
     }
 
-    /** Files the agent produced. Refetched on open rather than cached: a turn
-     *  that just finished has almost certainly changed this list. */
     async function renderFilesTab() {
         if (!state.sessionId) {
             dom.tabBody.innerHTML = '<div class="hs-empty">还没有会话</div>';
@@ -446,6 +450,69 @@
         await openSession(state.sessionId);
     }
 
+    // ── readability ──────────────────────────────────────────
+
+    /* How tall an output box opens at. Read from CSS so wide mode can change
+       it in one place (`--hs-output-height`) instead of the number living in
+       two files. */
+    function startingHeight() {
+        const raw = getComputedStyle(document.body)
+            .getPropertyValue('--hs-output-height').trim();
+        if (raw.endsWith('vh')) return window.innerHeight * parseFloat(raw) / 100;
+        return parseFloat(raw) || 320;
+    }
+
+    /* Pin a starting height, but only when the content actually overflows.
+       CSS cannot express "cap the height unless the user drags": `max-height`
+       would also clamp the inline height `resize` writes, leaving a box that
+       can shrink but never grow. Setting `height` here, only where it is
+       needed, keeps short output at its natural size and long output
+       draggable in both directions. */
+    function sizeOutput(root) {
+        const cap = startingHeight();
+        (root || document).querySelectorAll('.hs-tool-body pre, .hs-event-json')
+            .forEach((pre) => {
+                // `dataset.sized` guards re-renders: once the reader has
+                // dragged a box, re-pinning it would undo their choice.
+                if (pre.dataset.sized) return;
+                pre.dataset.sized = '1';
+                if (pre.scrollHeight > cap) pre.style.height = cap + 'px';
+            });
+    }
+
+    function initWideMode() {
+        const stored = (() => {
+            try { return localStorage.getItem('mw_harness_wide') === '1'; }
+            catch (e) { return false; }
+        })();
+        const btn = el('hs-wide');
+        const paint = () => {
+            document.body.classList.toggle('hs-wide', state.wide);
+            if (btn) {
+                btn.classList.toggle('btn-primary', state.wide);
+                btn.textContent = state.wide ? '窄屏' : '宽屏';
+                btn.title = state.wide
+                    ? '回到居中布局'
+                    : '铺满窗口，气泡占满整列，输出框开得更高';
+            }
+            // The starting height changes with the mode, so previously
+            // auto-sized boxes are re-measured against the new one.
+            document.querySelectorAll('.hs-tool-body pre, .hs-event-json')
+                .forEach((pre) => { delete pre.dataset.sized; pre.style.height = ''; });
+            sizeOutput();
+        };
+        state.wide = stored;
+        paint();
+        btn?.addEventListener('click', () => {
+            state.wide = !state.wide;
+            try { localStorage.setItem('mw_harness_wide', state.wide ? '1' : '0'); }
+            catch (e) { /* private window; the toggle still works for this visit */ }
+            paint();
+        });
+    }
+
+    /** Files the agent produced. Refetched on open rather than cached: a turn
+     *  that just finished has almost certainly changed this list. */
     // ── boot ─────────────────────────────────────────────────
 
     document.addEventListener('DOMContentLoaded', async () => {
@@ -488,6 +555,8 @@
                 { size: 116, min: 64 },        // composer
             ],
         });
+
+        initWideMode();
 
         // Auth.init() resolves asynchronously; reading the user directly races
         // with it and tells a logged-in user they are not.
