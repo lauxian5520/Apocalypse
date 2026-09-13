@@ -18,6 +18,9 @@
         registry: null,
         tab: 'events',
         running: false,
+        // Distinguishes a turn this page is streaming from one it merely
+        // found running on the server; only the former owns the UI controls.
+        ownTurn: false,
         search: '',
         wide: false,
     };
@@ -75,6 +78,11 @@
         T.renderUsage(dom.usage, detail.usage);
         renderConversation();
         renderTab();
+        // A turn outlives the page that started it. Reloading while one runs
+        // used to leave 中断 hidden and every send rejected by the server's
+        // is_busy check, with no way out of it from the UI — which is why a
+        // refresh appeared not to help. Trust the server's status instead.
+        adoptRunning(detail.status === 'running');
         await loadSessions();
     }
 
@@ -264,6 +272,8 @@
 
     /** Consume one SSE turn, appending events live to both panes. */
     async function runStream(path, body) {
+        clearTimeout(adoptTimer);
+        state.ownTurn = true;
         setRunning(true);
         const typing = document.createElement('div');
         typing.className = 'hs-typing';
@@ -299,7 +309,13 @@
                         if (node) dom.conversation.insertBefore(node, typing);
                     }
 
-                    renderTab();
+                    // Append, never re-render: renderTab() rebuilds the whole
+                    // log, and calling it per streamed chunk is quadratic — it
+                    // was costing 24ms per event and 30s of blocked main
+                    // thread by the 2000th, which is the page freezing.
+                    if (state.tab === 'events') {
+                        T.appendEvents(dom.tabBody, state.events, forkSession);
+                    }
                     scrollDown();
                 },
                 onError: (message) => {
@@ -312,6 +328,7 @@
             dom.conversation.insertBefore(bubble('hs-msg hs-msg-error', `⚠ ${e.message}`), typing);
         } finally {
             typing.remove();
+            state.ownTurn = false;
             setRunning(false);
             // Titles and usage are settled server-side after the turn.
             if (state.sessionId) {
@@ -329,6 +346,41 @@
         state.running = running;
         dom.send.disabled = running;
         dom.interrupt.classList.toggle('hs-hidden', !running);
+    }
+
+    /* A turn outlives the page that started it. If this tab reloads — or was
+       frozen — while one is running, the server still refuses every send with
+       `is_busy`, and 中断 was hidden because only `runStream` ever revealed it.
+       There was no way out of that from the UI, which is what made refreshing
+       look useless. So trust the server's status, show the interrupt button,
+       and poll until the turn actually ends rather than waiting for the user
+       to reload into the same dead end again. */
+    let adoptTimer = null;
+    function adoptRunning(running) {
+        clearTimeout(adoptTimer);
+        adoptTimer = null;
+        if (state.ownTurn) return;   // our own stream already owns these controls
+        setRunning(running);
+        if (!running) return;
+
+        const poll = async () => {
+            if (!state.sessionId || state.ownTurn) return;
+            try {
+                const d = await apiFetch(`/harness/sessions/${state.sessionId}`);
+                if (d.status === 'running') { adoptTimer = setTimeout(poll, 2000); return; }
+                setRunning(false);
+                state.events = await apiFetch(`/harness/sessions/${state.sessionId}/events`);
+                renderConversation();
+                renderTab();
+                T.renderUsage(dom.usage, d.usage);
+                dom.subtitle.textContent = `${d.preset} · ${d.status}`;
+                await loadSessions();
+            } catch (e) {
+                // A failed poll is not a finished turn; back off and retry.
+                adoptTimer = setTimeout(poll, 5000);
+            }
+        };
+        adoptTimer = setTimeout(poll, 2000);
     }
 
     async function interruptTurn() {

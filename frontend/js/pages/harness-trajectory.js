@@ -41,49 +41,94 @@
         }
     }
 
-    /** Raw event stream tab. `onFork(seq)` is called from a row's fork button. */
-    function renderEvents(container, events, onFork) {
-        if (!events.length) {
-            container.innerHTML = '<div class="hs-empty">还没有事件</div>';
-            return;
-        }
-
-        container.innerHTML = events.map((e) => `
+    /** One collapsed row. Built as a string so a full render stays one
+     *  `innerHTML` write; `appendEvents` reuses it for the incremental path. */
+    function eventRow(e) {
+        return `
             <div class="hs-event${SURFACE.has(e.type) ? ' hs-event-surface' : ''}" data-seq="${e.seq}">
                 <span class="hs-event-seq">${e.seq}</span>
                 <span>
                     <span class="hs-event-type">${esc(e.type)}</span>
                     <span class="hs-event-detail">${esc(summarize(e).slice(0, 160))}</span>
                 </span>
-            </div>`).join('');
+            </div>`;
+    }
 
-        // Expand a row to its full payload — the log is the product here, so
-        // every field must be reachable, not just the summary.
-        container.querySelectorAll('.hs-event').forEach((row) => {
-            row.addEventListener('click', () => {
-                const existing = row.querySelector('.hs-event-json');
-                if (existing) {
-                    existing.remove();
-                    row.querySelector('.hs-fork')?.remove();
-                    return;
-                }
-                const seq = Number(row.dataset.seq);
-                const event = events.find((e) => e.seq === seq);
-                const pre = document.createElement('pre');
-                pre.className = 'hs-event-json';
-                pre.textContent = JSON.stringify(event.data, null, 2);
-                row.appendChild(pre);
+    /* Expanding a row is delegated to the container rather than bound per row.
+       Per-row listeners forced every render to be a full rebuild — you cannot
+       append to a list whose handlers were attached in the same pass — and a
+       turn re-rendered the whole log on every streamed chunk. The live array
+       is parked on the container so the handler can find a payload by seq
+       without closing over the render that created the row. `onFork` rides
+       along for the same reason: the listener is attached once, so closing
+       over the first render's callback would silently ignore every later one. */
+    function bindEventRows(container, onFork) {
+        container.__events = container.__events || [];
+        container.__onFork = onFork;
+        if (container.__eventsBound) return;
+        container.__eventsBound = true;
+        container.addEventListener('click', (ev) => {
+            const row = ev.target.closest('.hs-event');
+            if (!row || !container.contains(row)) return;
+            if (ev.target.closest('.hs-fork')) return;   // its own handler ran
 
-                if (onFork && FORKABLE.has(event.type)) {
-                    const btn = document.createElement('button');
-                    btn.type = 'button';
-                    btn.className = 'hs-fork';
-                    btn.textContent = `从 seq ${seq} 分支`;
-                    btn.addEventListener('click', (ev) => { ev.stopPropagation(); onFork(seq); });
-                    row.appendChild(btn);
-                }
-            });
+            const existing = row.querySelector('.hs-event-json');
+            if (existing) {
+                existing.remove();
+                row.querySelector('.hs-fork')?.remove();
+                return;
+            }
+            const seq = Number(row.dataset.seq);
+            const event = (container.__events || []).find((e) => e.seq === seq);
+            if (!event) return;
+            const pre = document.createElement('pre');
+            pre.className = 'hs-event-json';
+            pre.textContent = JSON.stringify(event.data, null, 2);
+            row.appendChild(pre);
+
+            const fork = container.__onFork;
+            if (fork && FORKABLE.has(event.type)) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'hs-fork';
+                btn.textContent = `从 seq ${seq} 分支`;
+                btn.addEventListener('click', (e2) => { e2.stopPropagation(); fork(seq); });
+                row.appendChild(btn);
+            }
         });
+    }
+
+    /** Raw event stream tab. `onFork(seq)` is called from a row's fork button. */
+    function renderEvents(container, events, onFork) {
+        bindEventRows(container, onFork);
+        container.__events = events;
+        container.__rendered = events.length;
+        if (!events.length) {
+            container.innerHTML = '<div class="hs-empty">还没有事件</div>';
+            container.__rendered = 0;
+            return;
+        }
+        container.innerHTML = events.map(eventRow).join('');
+    }
+
+    /** Append whatever `events` has gained since the last render.
+     *
+     *  This is what keeps a streaming turn linear. Re-rendering the whole log
+     *  per event is quadratic, and measurably so: by 2000 events a single
+     *  event cost 24ms to draw and the turn had spent 30s blocking the main
+     *  thread — while chunks arrive every 32 characters, far faster than that.
+     *  The page stopped responding, which is what this is here to prevent. */
+    function appendEvents(container, events, onFork) {
+        if (container.__events !== events || container.__rendered == null) {
+            renderEvents(container, events, onFork);
+            return;
+        }
+        const from = container.__rendered;
+        if (events.length <= from) return;
+        if (from === 0) { renderEvents(container, events, onFork); return; }
+        container.insertAdjacentHTML('beforeend',
+            events.slice(from).map(eventRow).join(''));
+        container.__rendered = events.length;
     }
 
     /** Model-visible messages tab — the projection, verbatim from the server. */
@@ -239,6 +284,7 @@
     }
 
     window.HarnessTrajectory = {
-        renderEvents, renderDerived, renderPlugins, renderFiles, renderUsage, summarize,
+        renderEvents, appendEvents, renderDerived, renderPlugins, renderFiles, renderUsage,
+        summarize,
     };
 })();
