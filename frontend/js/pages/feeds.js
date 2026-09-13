@@ -4,6 +4,19 @@
    Uses escHtml / makeSkeleton from js/core/utils.js.
 ═══════════════════════════════════════════════════════════════ */
 
+// ── AI summarize button ──────────────────────────────────────────
+/* One definition for all four card types. It carries no inline `onclick`:
+   the old markup stopped propagation there, which is precisely why a
+   delegated listener could not be used and every loader had to remember to
+   bind the buttons itself — `loadClassifiedFeed` did not, so the trending
+   page rendered buttons that did nothing at all. Binding is now delegated
+   once (see below) and a new renderer gets it for free. */
+function summarizeButton(text, ctx, style = 'margin-left:auto') {
+    if (!Auth.token()) return '';
+    return `<button type="button" class="btn btn-sm ai-sum-btn"${style ? ` style="${style}"` : ''}`
+        + ` data-text="${encodeURIComponent(text)}" data-ctx="${escHtml(ctx)}">🤖 AI 总结</button>`;
+}
+
 // ── GitHub Trending card ─────────────────────────────────────────
 function renderGithubCard(item) {
     return `
@@ -19,7 +32,7 @@ function renderGithubCard(item) {
         <span>⭐ ${escHtml(item.stars || '0')}</span>
         <span>🍴 ${escHtml(item.forks || '0')}</span>
         ${item.stars_today ? `<span class="tag tag-active">+${escHtml(item.stars_today)}</span>` : ''}
-        ${Auth.token() ? `<button class="btn btn-sm ai-sum-btn" style="margin-left:auto" onclick="event.preventDefault();event.stopPropagation();" data-text="${encodeURIComponent((item.name || '') + ' ' + (item.description || ''))}" data-ctx="GitHub项目">🤖 AI 总结</button>` : ''}
+        ${summarizeButton((item.name || '') + ' ' + (item.description || ''), 'GitHub项目')}
       </div>
     </a>
   `;
@@ -39,7 +52,7 @@ function renderHFModelCard(item) {
         ${item.ai_category ? `<span class="tag tag-active">${escHtml(item.ai_category)}</span>` : ''}
         <span>❤️ ${item.likes || 0}</span>
         <span>⬇️ ${(item.downloads || 0).toLocaleString()}</span>
-        ${Auth.token() ? `<button class="btn btn-sm ai-sum-btn" style="margin-left:auto" onclick="event.preventDefault();event.stopPropagation();" data-text="${encodeURIComponent(item.name || item.id)}" data-ctx="AI模型">🤖 AI 总结</button>` : ''}
+        ${summarizeButton(item.name || item.id, 'AI模型')}
       </div>
     </a>
   `;
@@ -89,9 +102,7 @@ async function loadClassifiedFeed(endpoint, gridId, renderFn) {
 
 // ── Paper card ───────────────────────────────────────────────────
 function renderPaperCard(item, catName = '') {
-    const aiBtn = Auth.token()
-        ? `<button class="btn btn-sm ai-sum-btn" style="margin-left:auto" onclick="event.preventDefault();event.stopPropagation();" data-text="${encodeURIComponent((item.title || '') + '. ' + (item.abstract || ''))}" data-ctx="论文">🤖 AI 总结</button>`
-        : '';
+    const aiBtn = summarizeButton((item.title || '') + '. ' + (item.abstract || ''), '论文');
     const authors = Array.isArray(item.authors) ? item.authors.join(', ') : '';
     
     return `
@@ -121,7 +132,7 @@ function renderFocusCard(item) {
       </div>
       <p class="feed-title feed-news-title">${escHtml(item.title)}</p>
       <div class="feed-meta" style="margin-top:0.8rem">
-        ${Auth.token() ? `<button class="btn btn-sm ai-sum-btn" onclick="event.preventDefault();event.stopPropagation();" data-text="${encodeURIComponent(item.title)}" data-ctx="新闻">🤖 AI 总结</button>` : ''}
+        ${summarizeButton(item.title, '新闻', '')}
       </div>
     </a>
   `;
@@ -162,17 +173,21 @@ async function loadFeed(endpoint, gridId, renderFn, params = '') {
         const items = Array.isArray(data) ? data : (data.data || []);
         if (!items.length) { grid.innerHTML = '<div class="empty-state">暂无数据</div>'; return; }
         grid.innerHTML = items.map(renderFn).join('');
-        // Bind AI summarize buttons
-        grid.querySelectorAll('.ai-sum-btn').forEach(btn => {
-            btn.addEventListener('click', e => {
-                e.preventDefault();
-                aiSummarize(btn.dataset.text, btn.dataset.ctx, btn);
-            });
-        });
     } catch (e) {
         grid.innerHTML = `<div class="empty-state error">加载失败: ${escHtml(e.message)}</div>`;
     }
 }
+
+/* Delegated, so it covers every card on the page however it got there —
+   both loaders, a period-tab reload, and anything added later. The card is
+   an <a>, so the click must be cancelled here or it would navigate. */
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.ai-sum-btn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    aiSummarize(btn.dataset.text, btn.dataset.ctx, btn);
+});
 
 // ── Init per page ─────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
