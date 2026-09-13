@@ -480,6 +480,52 @@
             });
     }
 
+    /* One owner for the composer's height: the textarea's own inline height.
+
+       It used to have two. The pane was a fixed grid track that the divider
+       moved, while the textarea's native corner wrote an inline height with
+       nowhere to go — so dragging the corner grew the textarea *inside* a pane
+       that never moved, spilling 159px past the bottom of the page. Binding
+       the two together was worse: each wrote back into the other and the pair
+       did not converge (a 260px drag settled at 67px, and dragging the divider
+       down *grew* the composer).
+
+       So the track is `content`-sized instead — it simply fits whatever the
+       textarea currently is — and both affordances write the same one number:
+
+         the corner   →  the browser sets `height`, the `auto` row follows (CSS)
+         the divider  →  `onDrag` sets the same `height`
+
+       The conversation is `1fr`, so it absorbs the difference either way. */
+    function composerResize() {
+        const ta = dom.input;
+        const conv = dom.conversation;
+        if (!ta || !conv) return null;
+        const floor = parseFloat(getComputedStyle(ta).minHeight) || 40;
+        // The height we asked for, which is not always the height we got: a
+        // grid `auto` row is compressed when the container runs out of space,
+        // so reading `offsetHeight` back as the next drag's starting point
+        // loses whatever the grid clamped. Three drags of the same handle
+        // drifted 180 -> 143 -> 224 that way.
+        let requested = null;
+        let start = 0;
+        let ceiling = Infinity;
+
+        return function onDrag(index, delta, isStart) {
+            if (isStart) {
+                start = requested == null ? ta.offsetHeight : requested;
+                // Grow only into room the conversation can actually spare, so
+                // the grid never has to compress the row behind our back.
+                const spare = conv.offsetHeight
+                    - Math.max(80, parseFloat(getComputedStyle(conv).minHeight) || 0);
+                ceiling = start + Math.max(0, spare);
+                return;
+            }
+            requested = Math.min(ceiling, Math.max(floor, start + delta));
+            ta.style.height = requested + 'px';
+        };
+    }
+
     function initWideMode() {
         const stored = (() => {
             try { return localStorage.getItem('mw_harness_wide') === '1'; }
@@ -541,6 +587,7 @@
         // And vertically, so the conversation can take room back from the
         // composer. On a short viewport (a landscape phone) the composer and
         // the head between them left the conversation showing one line.
+        const onComposerDrag = composerResize();
         window.SplitPane?.make({
             id: 'harness-main',
             grid: '.hs-main',
@@ -549,10 +596,11 @@
             // (three diagonal strokes) that needs the room, and a horizontal
             // divider is a harder pointer target than a vertical one.
             handleSize: 12,
+            onDrag: onComposerDrag,
             tracks: [
                 { auto: true },                // head — sized by its own content
                 { flexible: true, min: 120 },  // conversation
-                { size: 116, min: 64 },        // composer
+                { content: true },             // composer — the textarea's height
             ],
         });
 

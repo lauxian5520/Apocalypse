@@ -32,6 +32,8 @@
   //   { size, min }   fixed, draggable, width/height persisted
   //   { flexible }    takes the remainder as `1fr`; never persisted
   //   { auto }        sized by its own content; no handle beside it
+  //   { content }     also content-sized, but a handle beside it *is* offered
+  //                   and its drag is handed to `onDrag(index, delta, isStart)`
   const AXIS = {
     col: { prop: 'gridTemplateColumns', client: 'clientWidth', point: 'clientX',
            cursor: 'col-resize', cls: 'split-handle', dir: 'vertical' },
@@ -76,7 +78,7 @@
     const out = sizes.slice();
 
     state.tracks.forEach(function (track, i) {
-      if (track.flexible || track.auto) return;
+      if (track.flexible || track.auto || track.content) return;
       out[i] = Math.max(track.min || 120, out[i]);
     });
 
@@ -95,6 +97,7 @@
         .map(function (w, i) { return { i: i, w: w }; })
         .filter(function (x) {
           return x.i !== flexIndex && !state.tracks[x.i].auto
+            && !state.tracks[x.i].content
             && x.w > (state.tracks[x.i].min || 120);
         })
         .sort(function (a, b) { return b.w - a.w; });
@@ -113,7 +116,7 @@
   function autoExtent(state) {
     let total = 0;
     state.tracks.forEach(function (track, i) {
-      if (!track.auto) return;
+      if (!track.auto && !track.content) return;
       const el = state.panes[i];
       if (el) total += state.axis === AXIS.row ? el.offsetHeight : el.offsetWidth;
     });
@@ -131,7 +134,7 @@
 
     state.sizes = clamp(state, state.sizes);
     const parts = state.tracks.map(function (track, i) {
-      if (track.auto) return 'auto';
+      if (track.auto || track.content) return 'auto';
       return track.flexible ? 'minmax(0, 1fr)' : state.sizes[i] + 'px';
     });
     // Interleave the handles so the grid has a real track for each one; a
@@ -154,11 +157,23 @@
     const after = handleIndex + 1;       // track right of it
     const startSizes = state.sizes.slice();
     const flexIndex = state.tracks.findIndex(function (t) { return t.flexible; });
+    // Exactly one side of a delegated boundary is a `content` track; the height
+    // lives on something inside that pane, so the page applies the delta and
+    // the `auto` row simply follows it.
+    const delegate = state.tracks[before].content ? before
+      : (state.tracks[after].content ? after : -1);
+    if (delegate >= 0 && state.onDrag) state.onDrag(delegate, 0, true);
 
     state.grid.classList.add('split-dragging');
 
     function onMove(e) {
       const dx = e[state.axis.point] - startX;
+      if (delegate >= 0) {
+        // `after` grows when the pointer moves back towards `before`, which is
+        // the opposite sign from the track this handle would otherwise widen.
+        if (state.onDrag) state.onDrag(delegate, delegate === after ? -dx : dx, false);
+        return;
+      }
       const next = startSizes.slice();
 
       // Only fixed tracks carry a width. Dragging a handle next to the
@@ -175,7 +190,7 @@
       state.grid.classList.remove('split-dragging');
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      save(state.id, state.sizes);
+      if (delegate < 0) save(state.id, state.sizes);
     }
 
     window.addEventListener('pointermove', onMove);
@@ -198,6 +213,7 @@
       tracks: opt.tracks,
       panes: panes,
       handleSize: opt.handleSize || 6,
+      onDrag: opt.onDrag || null,
       handles: [],
       // A boundary gets a handle only when both sides are resizable. An `auto`
       // track is sized by its own content, so a divider next to one would
@@ -208,7 +224,11 @@
 
     state.tracks.forEach(function (track, i) {
       if (i === 0) return;
-      if (track.auto || state.tracks[i - 1].auto) return;
+      // A `content` track is auto-sized like an `auto` one, but it *does* get a
+      // divider: the page says what the drag means through `onDrag`, because
+      // the height lives on something inside the pane rather than on the track.
+      var draggable = track.content || state.tracks[i - 1].content;
+      if (!draggable && (track.auto || state.tracks[i - 1].auto)) return;
       state.boundaries.push(i - 1);
     });
 
@@ -216,7 +236,8 @@
     if (Array.isArray(saved) && saved.length === state.tracks.length) {
       state.sizes = saved.map(function (w, i) {
         const track = state.tracks[i];
-        return (track.flexible || track.auto) ? 0 : (Number(w) || track.size);
+        return (track.flexible || track.auto || track.content)
+          ? 0 : (Number(w) || track.size);
       });
     }
 
