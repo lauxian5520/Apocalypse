@@ -478,6 +478,10 @@
             id: 'harness-main',
             grid: '.hs-main',
             axis: 'row',
+            // Taller than the column handles: this one carries a visible grip
+            // (three diagonal strokes) that needs the room, and a horizontal
+            // divider is a harder pointer target than a vertical one.
+            handleSize: 12,
             tracks: [
                 { auto: true },                // head — sized by its own content
                 { flexible: true, min: 120 },  // conversation

@@ -440,21 +440,54 @@ body.hs-wide { --hs-output-height: 60vh; --hs-event-height: 50vh; }
 /* ── horizontal splitter (conversation / composer) ───────────── */
 .split-handle-row {
     justify-self: stretch;
-    border-radius: 3px;
     cursor: row-resize;
     position: relative;
+    /* Always visible, like the textarea's native resize corner below it. The
+       previous version was transparent until hover, which meant the one pane
+       people actually wanted to enlarge gave no hint it could be. */
     background: transparent;
-    transition: background .15s ease;
 }
 .split-handle-row::after {
     content: '';
     position: absolute;
-    inset: -4px 0;          /* widen the grab target, not the track */
+    inset: -5px 0;          /* widen the grab target, not the track */
 }
+/* The grip itself: three diagonal strokes at the right end, echoing the
+   browser's own resize handle on the composer directly beneath. Drawn rather
+   than borrowed — `resize: vertical` cannot be used here, because an inline
+   height set by the browser would fight the grid track this pane lives in. */
+.split-handle-row::before {
+    content: '';
+    position: absolute;
+    right: .35rem;
+    top: 50%;
+    width: 14px;
+    height: 10px;
+    transform: translateY(-50%);
+    opacity: .5;
+    transition: opacity .15s ease;
+    background-image: repeating-linear-gradient(
+        135deg,
+        var(--text-2) 0 1px,
+        transparent 1px 4px
+    );
+}
+.split-handle-row:hover::before,
+.hs-main.split-dragging .split-handle-row::before {
+    opacity: 1;
+}
+/* Tint on hover with a translucent colour rather than `opacity`: opacity on
+   the handle would multiply into the grip drawn by ::before, dimming the very
+   thing the hover is supposed to emphasise. */
 .split-handle-row:hover,
 .hs-main.split-dragging .split-handle-row {
-    background: var(--accent, #6ea8ff);
-    opacity: .55;
+    background: linear-gradient(
+        to right,
+        transparent,
+        color-mix(in srgb, var(--accent, #6ea8ff) 45%, transparent) 40%,
+        color-mix(in srgb, var(--accent, #6ea8ff) 45%, transparent) 100%
+    );
+    border-radius: 3px;
 }
 .hs-main.split-dragging {
     user-select: none;
