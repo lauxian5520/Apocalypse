@@ -193,7 +193,13 @@ Enforced by convention, not tooling — respect it:
   runs out of room, so `offsetHeight` is the height you *got*, never the height you asked for —
   a drag must carry its own requested value or it drifts.
 - **The music player and clock are sized in `em`** off a single `font-size` on their root, so
-  scaling them is one number. Don't reintroduce `px` inside them.
+  scaling them is one number. Don't reintroduce `px` inside them. The scale is a *ratio* against
+  the widget's width at 1rem, so that base must be measured with the widget's stylesheet already
+  applied — `ui.js` injects `sprite-chat.css` at runtime for pages whose head lacks it, and a base
+  measured before the `<link>` loads is the width of the whole page. With a saved layout,
+  180/1400 set the clock to 0.129rem: a 180x11px box holding 2px text. Every page now links the
+  widget stylesheets itself (the injection stays as a net), and `clockBaseWidth()` refuses a
+  measurement taken while `position` is not yet `fixed`.
 - **The sprite is 天启, and it has no text bubble.** It expresses itself through eye shape, eye
   colour and aura (`MOODS` in `sprite-chat.js`). The old `.sprite-greeting` kaomoji bubble was
   removed because its show/hide timers raced with the hover state. Its gaze follows the pointer
