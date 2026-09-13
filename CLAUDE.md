@@ -180,6 +180,18 @@ Enforced by convention, not tooling — respect it:
   that did nothing at all. Don't reintroduce a per-loader binding: the delegated handler cancels
   the click itself, which is what stops the surrounding `<a class="feed-card">` from navigating.
   Note `focus.html` does not load `feeds.js`, so `renderFocusCard` there is currently dead.
+- **Never re-render the Harness inspector per streamed event.** `renderTab()` rebuilds the whole
+  log; calling it from the SSE loop is quadratic, and a streamed turn measured 24ms *per event*
+  and 30s of blocked main thread by its 2000th — chunks arrive every 32 characters, far faster
+  than that, so the page simply stopped responding. The live path calls `T.appendEvents()`, which
+  draws only what is new (2000 events: 30.2s → 0.05s). That is also why row clicks are delegated
+  to the container with `__events`/`__onFork` parked on it: per-row listeners force every render
+  to be a full rebuild.
+- **A Harness turn outlives the page that started it.** Reloading mid-turn used to leave 中断
+  hidden (only `runStream` revealed it) while the server rejected every send with `is_busy` —
+  no way out from the UI, which is why refreshing appeared not to help. `openSession` now adopts
+  the server's status and polls until the turn ends. `state.ownTurn` separates a turn this page
+  is streaming from one it merely found running.
 - The Harness inspector has four tabs; the files tab downloads through `fetch` + a blob, not a
   bare `<a href>`, because the API needs auth and `apiFetch` returns JSON only.
 - **The three floating widgets are draggable and resizable** via `js/widgets/floating-panel.js`,
