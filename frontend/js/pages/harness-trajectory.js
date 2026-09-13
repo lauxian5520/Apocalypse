@@ -271,16 +271,23 @@
     function renderUsage(container, usage) {
         if (!usage) { container.innerHTML = ''; return; }
         // A null cost means some model in this session has no published rate.
-        // Showing "—" is honest; showing 0 would not be.
-        const cost = usage.cost_usd === null || usage.cost_usd === undefined
-            ? '—'
-            : `$${usage.cost_usd.toFixed(4)}`;
+        // Showing "—" is honest; showing 0 would not be. But a bare dash gives
+        // no way to tell a missing table entry from a broken calculation, so
+        // name the model — that is the whole fix, and it is a one-line edit to
+        // harness/data/pricing.json.
+        const unknown = usage.cost_usd === null || usage.cost_usd === undefined;
+        const missing = usage.unpriced_models || [];
+        const cost = unknown ? '—' : `$${usage.cost_usd.toFixed(4)}`;
+        const why = unknown && missing.length
+            ? ` title="${esc(missing.join('、'))} 不在 harness/data/pricing.json 的价目表里，`
+                + `补上该模型的费率即可显示"`
+            : '';
         container.innerHTML = `
             <span>请求 <b>${usage.requests}</b></span>
             <span>输入 <b>${usage.prompt_tokens}</b></span>
             <span>输出 <b>${usage.completion_tokens}</b></span>
             <span>命中缓存 <b>${usage.cached_tokens}</b></span>
-            <span>预估费用 <b>${cost}</b></span>`;
+            <span${why}>预估费用 <b>${cost}</b></span>`;
     }
 
     window.HarnessTrajectory = {

@@ -5,10 +5,15 @@
     "(DeepSeek charges peak hours at a higher rate), so treat the figures as",
     "estimates and check https://api-docs.deepseek.com/quick_start/pricing .",
     "A model missing from this table reports no cost at all rather than a",
-    "wrong one — token counts stay exact either way."
+    "wrong one — token counts stay exact either way. The key must match the",
+    "model string the provider echoes back verbatim, not the family name: a",
+    "deployment running DEEPSEEK_MODEL=deepseek-flash showed no cost at all",
+    "because only deepseek-v4-flash was listed. harness_check.py now fails",
+    "when the configured model is missing from here, so it cannot go unnoticed."
   ],
   "currency": "USD",
   "models": {
+    "deepseek-flash": { "cache_hit": 0.007, "input": 0.22, "output": 0.66 },
     "deepseek-v4-flash": { "cache_hit": 0.007, "input": 0.22, "output": 0.66 },
     "deepseek-v4-pro": { "cache_hit": 0.022, "input": 0.66, "output": 1.98 },
     "deepseek-chat": { "cache_hit": 0.007, "input": 0.22, "output": 0.66 },
