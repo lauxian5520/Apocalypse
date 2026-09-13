@@ -172,6 +172,14 @@ Enforced by convention, not tooling — respect it:
   `keydown` and `touchstart` handlers all skip events that land on a floating overlay
   (`OVERLAYS` there). Without that guard, wheeling through 天启's reply scrolled the reply *and*
   flipped the page behind it, and an arrow key typed into the chat input moved the page.
+- **The AI 总结 buttons on the feed pages are bound once, by delegation, in `feeds.js`.** Every
+  renderer emits them through `summarizeButton()` and no loader binds anything. It used to be the
+  other way round — the markup carried an inline `onclick` that called `stopPropagation`, so a
+  delegated listener was impossible and each loader had to bind the buttons itself. `loadFeed`
+  did; `loadClassifiedFeed` (the trending page's loader) did not, so 热门项目 rendered buttons
+  that did nothing at all. Don't reintroduce a per-loader binding: the delegated handler cancels
+  the click itself, which is what stops the surrounding `<a class="feed-card">` from navigating.
+  Note `focus.html` does not load `feeds.js`, so `renderFocusCard` there is currently dead.
 - The Harness inspector has four tabs; the files tab downloads through `fetch` + a blob, not a
   bare `<a href>`, because the API needs auth and `apiFetch` returns JSON only.
 - **The three floating widgets are draggable and resizable** via `js/widgets/floating-panel.js`,

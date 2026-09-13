@@ -54,14 +54,10 @@ function renderList() {
         grid.innerHTML = html;
     }
 
-    // Bind AI summary buttons
-    grid.querySelectorAll('.ai-sum-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            await window.aiSummarize(btn.dataset.text, btn.dataset.ctx || '论文', btn);
-        });
-    });
+    // AI summary buttons need no binding here: feeds.js delegates the click
+    // once, for every card on the page whichever renderer produced it. Two
+    // mechanisms for one job is what left the trending page with buttons
+    // nobody had bound.
 }
 
 async function loadData() {
