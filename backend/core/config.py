@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     harness_preset: str = "standard"
     harness_model: str = ""              # blank follows the provider's own model
     harness_max_steps: int = 24
+    # Output cap per model call. 4096 truncates a `write` of any real file
+    # mid-arguments, and a truncated tool call is unrecoverable — the JSON
+    # never closes. Billing is per token actually generated, so a higher
+    # ceiling costs nothing on short turns. Lower it for a provider that
+    # rejects the value.
+    harness_max_tokens: int = 8192
     harness_context_budget_tokens: int = 48000
     harness_shell_enabled: bool = False
     harness_shell_timeout_seconds: int = 30

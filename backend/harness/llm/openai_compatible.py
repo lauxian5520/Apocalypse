@@ -13,6 +13,7 @@ from typing import AsyncIterator
 
 import httpx
 
+from core.config import get_settings
 from core.errors import ConfigurationError, UpstreamError
 from core.providers import FORMAT_OLLAMA, auth_headers
 from harness.llm.base import LLMDelta, LLMResult, LLMToolCall, LLMUsage
@@ -21,7 +22,18 @@ logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 120
 STREAM_TIMEOUT_SECONDS = 300
+# Fallback only; `_max_tokens()` reads the setting so a deployment can move it.
 DEFAULT_MAX_TOKENS = 4096
+
+
+def _max_tokens() -> int:
+    """Output cap for one model call.
+
+    Read per call rather than at import: `get_settings()` is cached, and a
+    module-level constant would freeze whatever the environment held when this
+    module first loaded.
+    """
+    return getattr(get_settings(), "harness_max_tokens", None) or DEFAULT_MAX_TOKENS
 TEMPERATURE = 0.3          # lower than the chat widget: tool arguments must be exact
 
 
@@ -126,7 +138,7 @@ class OpenAICompatibleAdapter:
         # empty string the caller will quietly treat as a valid answer.
         if not content and finish_reason == "length":
             raise UpstreamError(
-                f"模型在 max_tokens={max_tokens or DEFAULT_MAX_TOKENS} 内只产出了推理过程，"
+                f"模型在 max_tokens={max_tokens or _max_tokens()} 内只产出了推理过程，"
                 f"没有正文；{self.model} 需要更大的输出预算"
             )
 
@@ -143,7 +155,7 @@ class OpenAICompatibleAdapter:
             "messages": messages,
             "stream": stream,
             "temperature": TEMPERATURE,
-            "max_tokens": DEFAULT_MAX_TOKENS,
+            "max_tokens": _max_tokens(),
         }
         if tools:
             payload["tools"] = tools

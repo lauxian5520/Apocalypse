@@ -425,6 +425,7 @@ docker compose up -d
 | `HARNESS_SHELL_ENABLED` | 是否给 Agent `bash` 工具（读完安全模型再开） | `false` |
 | `HARNESS_PRESET` | 运行模式 | `standard \| minimal` |
 | `HARNESS_MODEL` | Harness 专用模型，留空跟随 provider | 空 |
+| `HARNESS_MAX_TOKENS` | 单次模型调用的输出上限。太小会把较大的 `write` 从参数中间截断，而截断的工具调用无法恢复 | `8192` |
 | `HARNESS_WORKSPACE_QUOTA_MB` | 每个会话工作区容量上限 | `64` |
 | `HARNESS_SUBAGENT_ENABLED` | 是否提供 `subagent` 工具 | `true` |
 | `HARNESS_SUBAGENT_MAX_DEPTH` | 派发层数上限（子代理不能再派） | `1` |

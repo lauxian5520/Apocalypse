@@ -326,6 +326,57 @@ async def check_subagent() -> str:
             f"严格策略把 ask 变 deny · 上限 {settings.harness_subagent_max_per_session} 次/会话")
 
 
+def check_tool_arguments() -> str:
+    """A model's tool arguments are text, and `write` is where that shows.
+
+    File content is mostly newlines, and models routinely put real ones inside
+    the JSON string rather than escaping them; that must still parse. A call
+    cut off by the output cap must not be reported as bad syntax, or the model
+    rewrites the same too-long file and is cut off again.
+    """
+    from core.errors import AppError
+    from harness.tools.registry import parse_arguments
+
+    recoverable = {
+        "裸换行": '{"path":"a.md","content":"第一行\n第二行"}',
+        "裸制表符": '{"path":"a.py","content":"def f():\n\treturn 1"}',
+        "正常转义": '{"path":"a.md","content":"第一行\\n第二行"}',
+        "空参数": "",
+    }
+    for label, raw in recoverable.items():
+        try:
+            parse_arguments(raw)
+        except AppError as e:
+            raise RuntimeError(f"{label} 本应能解析，却报 {e.message}")
+    if parse_arguments(recoverable["裸换行"])["content"] != "第一行\n第二行":
+        raise RuntimeError("恢复出来的 content 与原文不一致")
+
+    truncated = ('{"path":"a.md","content":"# 标题\n写到一半',
+                 '{"path":"a.md","content":"ok"',
+                 '{"path":"a.md","content":')
+    for raw in truncated:
+        try:
+            parse_arguments(raw)
+        except AppError as e:
+            if "被截断" not in e.message:
+                raise RuntimeError(f"截断的参数被报成了格式错误：{e.message}")
+        else:
+            raise RuntimeError(f"截断的参数竟然解析成功：{raw!r}")
+
+    malformed = ('{"path":"a.md" "content":"ok"}', "{'path':'a.md'}", '["a","b"]')
+    for raw in malformed:
+        try:
+            parse_arguments(raw)
+        except AppError as e:
+            if "被截断" in e.message:
+                raise RuntimeError(f"格式错误被误判成截断：{raw!r}")
+        else:
+            raise RuntimeError(f"非法参数竟然解析成功：{raw!r}")
+
+    return (f"裸控制字符可恢复 · 截断与格式错误分别命名 · "
+            f"输出上限 {settings.harness_max_tokens}")
+
+
 def check_approval() -> str:
     policy, registry = ApprovalPolicy(), ToolRegistry("standard")
     if "bash" not in registry:
@@ -551,6 +602,7 @@ async def main() -> int:
     await stage("技能", check_skills)
     await stage("子代理装配", check_subagent)
     await stage("文件产出与下载", check_artifacts)
+    await stage("工具参数解析", check_tool_arguments)
     await stage("审批策略", check_approval)
     await stage("事件日志与消息投影", check_log_projection)
 
