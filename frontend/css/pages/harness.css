@@ -221,8 +221,28 @@ body {
 
 /* ── composer ─────────────────────────────────────────────── */
 
+/* The composer's row is `auto` (see the `content` track in harness.js), so the
+   pane is exactly as tall as this textarea plus the buttons — which is what
+   makes the textarea's own resize corner work: the height it writes has
+   somewhere to go, and the conversation's `1fr` gives up the difference. */
 .hs-composer { border-top: 1px solid var(--border); padding-top: .75rem; }
-.hs-input { min-height: 60px; font-size: .85rem; }
+.hs-input {
+    min-height: 60px;
+    font-size: .85rem;
+    /* `.textarea` in base.css transitions `all`, and `all` includes `height`.
+       On a box you can drag, that is fatal: the browser writes a new height on
+       every pointer move and each one eases over 300ms, so the box trails the
+       cursor and never catches up — which reads as "the resize handle does
+       nothing". Keep the focus animation, drop the geometry. */
+    transition: border-color var(--transition),
+                background var(--transition),
+                box-shadow var(--transition);
+    /* A cap is needed *here* because the native corner does not go through
+       JS and so cannot be told what the conversation can spare. Without it a
+       long drag drives the `1fr` row to zero and the conversation's own floor
+       then overflows the workbench. The divider computes an exact ceiling. */
+    max-height: 50vh;
+}
 
 .hs-composer-actions {
     display: flex;

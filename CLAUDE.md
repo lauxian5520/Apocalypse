@@ -181,6 +181,17 @@ Enforced by convention, not tooling — respect it:
   it positions with `left`/`top`, never `transform`, because the sprite's idle bob and the clock's
   tick animation already own `transform`. Layouts persist per widget in `localStorage` and are
   clamped into the viewport on load and on window resize.
+- **`.textarea` in `base.css` transitions `all`, and `all` includes `height`.** On a box the user
+  can drag (`resize: vertical`), that is fatal: the browser writes a new height on every pointer
+  move and each one eases over 300ms, so the box trails the cursor and reads as a dead handle.
+  `.hs-input` overrides it back to colour-only. Any other resizable element needs the same.
+- **One number, one owner.** The Harness composer's height is the textarea's own inline height,
+  and its grid row is a `content` track that follows it — so the native corner and the divider
+  above it both write the same place. Binding two owners together instead (a fixed track plus a
+  `ResizeObserver` pushing back) did not converge: a 260px drag settled at 67px and dragging the
+  divider *down* grew the pane. Note a grid `auto`/`content` row is compressed when the container
+  runs out of room, so `offsetHeight` is the height you *got*, never the height you asked for —
+  a drag must carry its own requested value or it drifts.
 - **The music player and clock are sized in `em`** off a single `font-size` on their root, so
   scaling them is one number. Don't reintroduce `px` inside them.
 - **The sprite is 天启, and it has no text bubble.** It expresses itself through eye shape, eye
