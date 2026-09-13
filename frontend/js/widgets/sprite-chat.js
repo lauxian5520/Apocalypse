@@ -204,11 +204,26 @@
     makeClockDraggable(root);
   }
 
+  /** The width the clock has at `font-size: 1rem` — the reference every later
+   *  size is a ratio of. It is only meaningful once sprite-chat.css has
+   *  applied: unstyled, the clock is a plain block and measures the width of
+   *  the whole page. A saved layout then divides by that, and 180/1400 set the
+   *  root to 0.129rem — a 180x11px box holding 2px text, which is what
+   *  admin/login/register showed while ui.js was still fetching the stylesheet
+   *  it injects for them. `position: fixed` is the cheapest proof the rule is
+   *  in effect; without it, fall back to the design width rather than scale off
+   *  a measurement that means nothing. */
+  function clockBaseWidth(root) {
+    const DESIGN_WIDTH = 136;   // `min-width: 8.5em` at 1rem
+    if (getComputedStyle(root).position !== 'fixed') return DESIGN_WIDTH;
+    return Math.round(root.getBoundingClientRect().width) || DESIGN_WIDTH;
+  }
+
   /** The clock scales as a whole: its stylesheet sizes everything in `em`, so
    *  one font-size on the root moves date, time and meta together. */
   function makeClockDraggable(root) {
     if (!window.FloatingPanel) return;
-    const baseWidth = root.getBoundingClientRect().width || 136;
+    const baseWidth = clockBaseWidth(root);
     window.FloatingPanel.make(root, {
       id: 'clock',
       autoHeight: true,
