@@ -377,6 +377,32 @@ def check_tool_arguments() -> str:
             f"输出上限 {settings.harness_max_tokens}")
 
 
+def check_pricing() -> str:
+    """The model this deployment actually runs must have a rate.
+
+    Cost is looked up by the exact model string the provider echoes back, and
+    a miss reports no cost at all — silently, forever. That is how a
+    deployment ran on `deepseek-flash` while only `deepseek-v4-flash` was
+    listed and showed a dash for every session.
+    """
+    from core.providers import provider_config
+    from harness.llm.base import LLMUsage
+    from harness.llm.pricing import _table, estimate_cost
+
+    table = _table()
+    if not table:
+        raise RuntimeError("价目表读不出来，所有会话都会显示不出费用")
+
+    model = settings.harness_model or provider_config()["model"]
+    probe = LLMUsage(model=model, prompt_tokens=1000, completion_tokens=500, cached_tokens=200)
+    if estimate_cost(probe) is None:
+        raise RuntimeError(
+            f"当前模型 {model!r} 不在 harness/data/pricing.json 里，"
+            f"会话只会显示 token 数、费用恒为 “—”。已收录：{sorted(table)}"
+        )
+    return f"{model} 已定价 · 表内 {len(table)} 个模型"
+
+
 def check_approval() -> str:
     policy, registry = ApprovalPolicy(), ToolRegistry("standard")
     if "bash" not in registry:
@@ -603,6 +629,7 @@ async def main() -> int:
     await stage("子代理装配", check_subagent)
     await stage("文件产出与下载", check_artifacts)
     await stage("工具参数解析", check_tool_arguments)
+    await stage("费用价目表", check_pricing)
     await stage("审批策略", check_approval)
     await stage("事件日志与消息投影", check_log_projection)
 

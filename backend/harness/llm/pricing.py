@@ -42,6 +42,11 @@ def summarize(usage_events: list[dict]) -> dict:
     """Roll `llm/usage` event payloads up into a session total."""
     prompt = completion = cached = 0
     cost: float | None = 0.0
+    # Which models had no rate. Without this the readout is a bare "—" with no
+    # way to tell a missing table entry from a broken calculation, which is how
+    # a deployment ran for weeks showing no cost at all: its model string was
+    # `deepseek-flash` and only `deepseek-v4-flash` was listed.
+    unpriced: list[str] = []
 
     for raw in usage_events:
         usage = LLMUsage(
@@ -59,6 +64,8 @@ def summarize(usage_events: list[dict]) -> dict:
         # than quietly reporting a partial sum as if it were complete.
         if one is None:
             cost = None
+            if usage.model and usage.model not in unpriced:
+                unpriced.append(usage.model)
         elif cost is not None:
             cost += one
 
@@ -68,5 +75,6 @@ def summarize(usage_events: list[dict]) -> dict:
         "cached_tokens": cached,
         "total_tokens": prompt + completion,
         "cost_usd": round(cost, 6) if cost is not None else None,
+        "unpriced_models": unpriced,
         "requests": len(usage_events),
     }

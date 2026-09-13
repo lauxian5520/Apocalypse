@@ -323,6 +323,11 @@ Non-obvious behaviour learned the hard way, all commented at the relevant code:
   model rewrites the same too-long file and is cut off again. `HARNESS_MAX_TOKENS` is that cap
   (4096 truncates any real file; the default is 8192). The two are told apart by the decode error:
   an unterminated string, or a position at end-of-input, means the arguments stopped arriving.
+- **Cost is keyed by the exact model string the provider echoes back**, not the family name, and
+  a miss reports no cost at all — silently, forever. This deployment ran on `deepseek-flash`
+  while `harness/data/pricing.json` listed only `deepseek-v4-flash`, so every session showed a
+  dash. `harness_check.py` now fails when the configured model has no rate, `summarize()` returns
+  `unpriced_models`, and the UI names them in a tooltip. Adding a model is one line of data.
 - **Streamed chunks are batched** (`CHUNK_FLUSH_SIZE` / `CHUNK_FLUSH_SECONDS`) — one commit per
   token cost roughly a fifth of a long turn's wall clock.
 - The system prompt carries the current **date only** — second precision would invalidate the
