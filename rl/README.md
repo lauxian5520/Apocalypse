@@ -64,7 +64,8 @@ Raspberry Pi 5 上索引 40 MB、载入 2.7 s、短查询约 0.7 ms。
 `search` 与 `open` 的信息分割**就是**第二跳。`corpus_answer` 的回执不透露对错，
 否则模型可以反复调用把验证器变成神谕。
 
-**对 `backend/` 的改动**：新增数据文件 + 一个工具模块 + 两行配置。
+**对 `backend/` 的改动**：全是新增——语料包 `harness/corpus/`、一个工具模块、一个预设及其提示词与
+工具契约——外加两个配置字段和工具注册表门禁里的一行。
 `agent.py` / `projection.py` / `events.py` / `context.py` / `approval.py` **一行未改**。
 `HARNESS_CORPUS_ENABLED` 默认 `false`，线上站点行为完全不变。
 
@@ -324,7 +325,7 @@ python -m rl.train.run_grpo --smoke --base Qwen/Qwen2.5-0.5B-Instruct
 python -m rl.train.run_grpo --base Qwen/Qwen2.5-1.5B-Instruct \
     --adapter rl/data/adapters/sft --steps 500 -G 8 --questions-per-step 8
 
-# 自检：17 个离线阶段 + 1 个真实调用（GRPO 那一阶段需要 torch，否则跳过）
+# 自检：21 个离线阶段 + 1 个真实 rollout（其中 2 个阶段需要 torch，没装时跳过）
 python -m rl.checks.rl_check --offline
 ```
 

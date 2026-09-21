@@ -6,7 +6,7 @@
 
 **把笔记、论文、GitHub Trending、热点与可追溯 AI Agent，收进一个可自托管的知识工作台。**
 
-[English](README_EN.md) · [快速开始](#-快速开始) · [功能全景](#-功能全景) · [Roadmap](ROADMAP.md) · [参与贡献](CONTRIBUTING.md) · [报告问题](https://github.com/lauxian5520/Apocalypse/issues)
+[English](README_EN.md) · [快速开始](#-快速启动) · [功能全景](#-功能全景) · [Roadmap](ROADMAP.md) · [参与贡献](CONTRIBUTING.md) · [报告问题](https://github.com/lauxian5520/Apocalypse/issues)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c3aed.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -23,6 +23,9 @@
 - **Agent 全程可核对**：工具调用、审批、Token、模型可见消息和事件轨迹都能回放，不靠“黑盒魔法”。
 - **真正可自托管**：FastAPI + SQLite + 原生前端，Docker Compose 一条命令启动，运行数据集中在 `var/`。
 - **不绑定模型厂商**：支持 DeepSeek、智谱、Gemini、OpenAI、Ollama 和 OpenAI 兼容端点。
+- **同一个 Runtime 还是一套 RL 环境**：`rl/` 深研场把这个 Agent 变成可复现的 Deep Research
+  强化学习环境——冻结语料、精确验证器、泄漏过滤、并发 rollout、token 级 loss mask、GRPO，
+  每个设计决定都有实测数字，包括推翻第一版设计的那一组。
 
 > 如果 Apocalypse 对你有帮助，欢迎点一个 ⭐。它会让更多需要“个人知识空间 + 可追溯 Agent”的开发者发现这个项目。
 
@@ -32,6 +35,7 @@
 |---|---|---|
 | GitHub Trending、Hugging Face、arXiv、多平台热点 | 流式对话、页面总结、内容解释、工具调用 | Markdown 多图笔记、评论、私聊、附件 |
 | 每日/每周/月度聚合 | 人工审批、沙箱、轨迹检查、上下文压缩 | 本地数据库、统一备份、后台管理 |
+| HotpotQA 冻结语料（66,581 段，哈希入清单） | Agentic RL：验证器、并发 rollout、GRPO | 事件日志即训练轨迹，环境指纹可复现 |
 
 <details>
 <summary><strong>适合谁？</strong></summary>
@@ -46,7 +50,8 @@
 
 - **📝 社交笔记** — 发帖（Markdown + 多图）、评论、匿名发布、AI 解释
 - **🤖 AI 助手「天启」** — 3D 精灵对话（SSE 流式）、页面总结、内容解释（DeepSeek / 智谱 / Gemini / OpenAI / Ollama / 自定义）
-- **🧩 Harness 智能体工作台** — 会话式 Agent：工具调用、人工审批、沙箱工作区、全链路事件日志、轨迹检查器、Token 计费、上下文压缩、会话 fork/replay（详见下方专节）
+- **🧩 Harness 智能体工作台** — 会话式 Agent：工具调用、人工审批、沙箱工作区、全链路事件日志、轨迹检查器、Token 计费、上下文压缩、会话 fork/replay、可拖拽分栏（详见下方专节）
+- **🧪 深研场（Agentic RL）** — 建在 Harness 之上的 Deep Research 强化学习环境：任务集、验证器、rollout 引擎、loss mask、GRPO（详见[下方专节](#-深研场deep-research-的-agentic-rl-环境)与 [rl/README.md](rl/README.md)）
 - **⚡ 热门项目** — GitHub Trending + HuggingFace 模型（每日/每周/每月）
 - **📄 前沿论文** — HuggingFace Daily Papers + arXiv
 - **🔥 焦点新闻** — 多平台热点聚合
@@ -63,7 +68,14 @@
 ```
 Apocalypse/
 ├── rl/                       # 深研场：Deep Research 的 Agentic RL 环境与训练（见 rl/README.md）
-│                             #   单向依赖 backend/harness；backend/ 永不 import rl/
+│   │                         #   单向依赖 backend/harness；backend/ 永不 import rl/
+│   ├── corpus/  tasks/       #   语料构建、泄漏过滤、冻结切分（带 sha256）
+│   ├── verifiers/            #   精确验证器与奖励聚合（塑形项门控在正确性之后）
+│   ├── env/                  #   环境装配、钉死的 chat template、训练期适配器
+│   ├── rollout/  eval/       #   并发多轮 rollout 引擎、评测报告
+│   ├── attribution/          #   上下文消融归因
+│   ├── train/                #   SFT / GRPO / LoRA 热插拔 —— 唯一需要 GPU 的部分
+│   └── checks/rl_check.py    #   分段自检
 ├── backend/                  # 后端代码（只读，不含任何运行时数据）
 │   ├── main.py               # 应用装配：中间件 → 异常处理 → 路由 → 静态文件
 │   ├── core/                 # 基础设施：谁都可以依赖，它不依赖任何人
@@ -99,6 +111,7 @@ Apocalypse/
 │       ├── skills/           #   技能索引：目录清单 + 按需读取正文
 │       ├── agents/           #   子代理角色定义的加载与清单
 │       ├── sandbox/          #   工作区路径收敛 + 受限子进程执行
+│       ├── corpus/           #   冻结语料读取 + 手写 BM25（corpus_* 工具与 rl/ 共用一份）
 │       └── data/             #   ⭐ 纯数据：提示词、工具契约、预设、技能、角色、价格表、白名单
 │
 ├── frontend/                 # 前端代码（只读）
@@ -109,7 +122,7 @@ Apocalypse/
 │   │   └── pages/            #   每页专属样式
 │   └── js/
 │       ├── core/             #   utils → auth → api → ui（按此顺序加载）
-│       ├── widgets/          #   floating-panel（拖动/缩放）、sprite-chat、music-player
+│       ├── widgets/          #   floating-panel（拖动/缩放）、split-pane（分栏拖拽）、sprite-chat、music-player
 │       └── pages/            #   每页专属逻辑
 │
 ├── var/                      # ⚠️ 运行时数据（唯一可变目录，整体备份即可）
@@ -128,6 +141,7 @@ Apocalypse/
 ### 依赖方向
 
 ```
+rl/ ─────────────────→  harness           （单向：backend/ 永不 import rl/）
 routers  →  services | harness  →  models
     └──────────┴─────────┴──────────┴────→  core
 ```
@@ -135,6 +149,10 @@ routers  →  services | harness  →  models
 上层可以依赖下层，反向禁止。`core` 不 import 任何业务模块；`services` 与 `harness` 不 import
 `routers`，也不接触 `Request`/`HTTPException`，出错时抛 `core.errors` 里的领域异常，由
 `main.py` 统一翻译成状态码。`harness/` 与 `services/` 同层，是一个自成一包的子系统。
+
+`rl/` 在 `backend/` 之外，只向内依赖 `harness/`。语料读取器和 BM25 索引放在
+`harness/corpus/` 而不是 `rl/`，因为它们定义了 Agent **看到**什么——工具在 rollout 时用它、
+离线流水线在构建时用它，只有一份实现才能保证两边一致。反方向的依赖会把 torch 拖进 Web 服务的导入图。
 
 ## 🧩 Harness 智能体工作台
 
@@ -148,6 +166,22 @@ routers  →  services | harness  →  models
    页面右栏的「模型可见消息」页签直接展示它的输出，这个说法是可以当场核对的。
 
 访问 `/harness.html`。
+
+### 工作台界面
+
+左栏会话列表、中栏对话、右栏检查器（原始事件流 / 模型可见消息 / 文件 / 插件面板）。
+默认布局**正好占满一屏**，要更大的空间时再自己拖：
+
+| 想看更多 | 怎么做 |
+|---|---|
+| 某一栏更宽 | 拖栏间分隔条，双击复位；宽度按浏览器记住 |
+| 对话区更高 / 输入框更大 | 拖对话区与输入框之间的分隔条，或拖输入框右下角——两者改的是同一个高度 |
+| 单条工具输出更长 | 输出框默认最高 320px、框内滚动，右下角可拖；拖过的框不会被重渲染复位 |
+| 全部放开 | 「宽屏」：页面铺满窗口、气泡占满整列、输出框初始 60vh，记在浏览器里 |
+
+长轮次不会拖垮页面：流式过程中检查器只**追加**新事件，而不是每来一个 chunk 就重建整张表
+（2000 个事件时，主线程累计阻塞从 30.2 s 降到 0.05 s）。轮次也比页面活得久——刷新时如果
+会话仍在服务端运行，页面会接回这个状态：显示「中断」、禁止重复发送，并轮询到轮次结束。
 
 ### 一轮对话发生了什么
 
@@ -173,6 +207,7 @@ turn/end
 | `todo_write` / `exit_plan_mode` | read | 任务清单与方案确认 |
 | `load_skill` | read | 按需读取一份技能的流程正文，见下 |
 | `subagent` | write | 把子任务派给独立的子代理，见下 |
+| `corpus_search` / `corpus_open` / `corpus_answer` | read | 冻结语料上的检索与作答，**默认关闭**，只供 RL 环境使用（`HARNESS_CORPUS_ENABLED`） |
 
 工具的**模型可见契约**（名称、描述、JSON Schema、权限位）住在 `harness/data/tools/*.json`，
 Python 里只有 handler，注册时按名字绑定。改一句工具描述不需要动代码。
@@ -310,7 +345,12 @@ sudo chown -R 10001:10001 ./var
 
 - **状态自愈** — 浏览器中途关掉，流式响应的生成器不会立刻被回收，所以收尾工作放在 Starlette 的
   background task 里（断连也会执行）；`manager.reconcile_status()` 再以事件日志为准兜底，
-  会话不会卡在 `running`。
+  会话不会卡在 `running`。前端同样以服务端状态为准：刷新时轮次仍在跑，就接回「运行中」并露出
+  「中断」按钮——此前刷新后这个按钮是隐藏的，而服务端又拒绝一切新消息，会话在界面上无路可走。
+- **工具参数** — 模型写文件时常把真换行、真制表符直接放进 JSON 字符串，严格解析会拒收；这里会
+  宽松重解一次，内容逐字节不变。另一种失败是输出触顶、参数被截断——那无法恢复，会被明确报成
+  「被截断」并建议拆成多次调用，而不是笼统的「不是合法 JSON」，否则模型会原样重写同一个过长
+  文件、再被截断一次。单次输出上限是 `HARNESS_MAX_TOKENS`（默认 8192）。
 - **上下文压缩** — 触发条件用的是 provider 回报的**真实** `prompt_tokens`（`llm/usage` 事件），
   不是本地估算：一次请求除了对话，还要带系统提示词和全部工具 schema，这两项就有一两千 token，
   纯靠估算会严重低估而迟迟不压缩。压缩点只会落在 `user/message` 之前，避免把工具调用和它的
@@ -325,7 +365,9 @@ sudo chown -R 10001:10001 ./var
 - **思考型模型** — `deepseek-v4-pro` 这类模型会先花输出预算做推理，再吐正文。所以标题、
   摘要这类短输出的 `max_tokens` 必须留足余量（代码里已按 512 / 3000 设置）；预算给小了会
   拿到空正文，此时适配器直接报错而不是返回空串——这个坑最初就是靠这条报错才发现的。
-- **计费** — `data/pricing.json` 是数据文件；表里查不到的模型显示「—」而不是 0，
+- **计费** — `data/pricing.json` 是数据文件，**按 provider 回传的模型字符串精确匹配**：
+  `deepseek-flash` 和 `deepseek-v4-flash` 是两个键，差一个前缀就查不到。查不到的模型显示「—」
+  而不是 0，悬停会写明是哪个模型缺价格；`harness_check.py` 也会在当前模型未定价时判失败。
   token 数无论如何都是准确的。价格会变，请对照 [DeepSeek 官方定价](https://api-docs.deepseek.com/quick_start/pricing) 自行核对。
 - **提示词快照** — 系统提示词会随 `config/change` 事件写进日志（仅在内容变化时写，不刷日志）。
   因为它包含当天日期、且由 `system.md` 拼出来，读取时重算会让历史会话显示模型当时没见过的
@@ -343,27 +385,41 @@ cd backend && python ../tools/harness_check.py                # 加上真实 pro
 cd backend && python ../tools/harness_check.py --url http://localhost:8000 --token <管理员 JWT>
 ```
 
-检查项：配置 → 数据库 → 沙箱与路径收敛 → 工具注册表 → 审批策略 → 事件日志与消息投影 →
-模型调用 → 工具调用（流式拼装）→ 完整一轮 → HTTP 接口与 SSE。全部通过时退出码 0，
+共 16 个阶段。本地接线：配置 → 数据库 → 沙箱与路径收敛 → 工具注册表 → 工具自动发现 → 技能 →
+子代理装配 → 文件产出与下载 → 工具参数解析 → 费用价目表 → 审批策略 → 事件日志与消息投影；
+加上模型调用 → 工具调用（流式拼装）→ 完整一轮 → HTTP 接口与 SSE。全部通过时退出码 0，
 有失败时退出码 1，可直接接进部署脚本。
 
 ```
 本地接线
-  ✓ 配置                        deepseek/deepseek-chat · key 已配置
+  ✓ 配置                        deepseek/deepseek-flash · key 已配置 · var=…/var
   ✓ 数据库                      sqlite · harness_sessions / harness_events 就绪
   ✓ 沙箱与路径收敛              读写正常 · 越界与绝对路径均被拒绝 · 配额 64MB
-  ✓ 工具注册表                  契约绑定 10 个 · 本模式启用 10 个 · shell 开
+  ✓ 工具注册表                  契约绑定 16 个 · 本模式启用 13 个 · 预设 ['deepresearch', 'minimal', 'standard'] · shell 开
+  ✓ 工具自动发现                契约驱动 8 个模块 · 顺序稳定 · 孤儿契约被拒 · 零注册代码接入 ['load_skill', 'subagent']
+  ✓ 技能                        技能 ['web-research', 'workspace-report', 'docx', 'pptx'] · 清单已注入 · 越权与穿越均被拒 · 坏文件只跳过不致命
+  ✓ 子代理装配                  子代理 ['coder', 'researcher'] · 不可递归 · 共用工作区 · depth 递增 · 严格策略把 ask 变 deny · 上限 16 次/会话
+  ✓ 文件产出与下载              技能包 ['docx', 'pptx'] 可装入工作区（2 个文件）· 越界路径被拒 · zip 可读（3 项）
+  ✓ 工具参数解析                裸控制字符可恢复 · 截断与格式错误分别命名 · 输出上限 8192
+  ✓ 费用价目表                  deepseek-flash 已定价 · 表内 7 个模型
   ✓ 审批策略                    放行 / 询问 / 拒绝 三类判定均正确
   ✓ 事件日志与消息投影          3 条事件 → 4 条消息 ['system', 'user', 'assistant', 'tool']
 ```
 
-**RL 环境自检** —— 语料哈希、检索确定性、动作空间、两种 store 的投影一致性、
-验证器用例、分词前缀性质与 loss mask、GRPO 目标函数，同样是分段自检、失败非零退出：
+「契约绑定 16 个 · 本模式启用 13 个」的差额就是三个 `corpus_*` 工具：契约存在，但门禁关着。
+
+**RL 环境自检** —— 语料哈希、检索确定性、动作空间与模块门禁、两种 store 的投影一致性、
+验证器用例、分词前缀性质与 loss mask、训练循环编排、LoRA 热插拔接线、`logp_old` 对位、
+GRPO 目标函数，同样是分段自检、失败非零退出。**从仓库根目录运行**（与 `tools/` 相反）：
 
 ```bash
-python -m rl.checks.rl_check --offline      # 11 个离线阶段，不花 token
-python -m rl.checks.rl_check                # 再加一次真实 rollout
+python -m rl.checks.rl_check --offline      # 21 个离线阶段，不花 token
+python -m rl.checks.rl_check                # 再加 1 次真实 rollout
 ```
+
+其中「GRPO 损失」「两种 advantage 实现一致」两个阶段需要 torch，没装时跳过——所以在不带
+torch 的解释器上 `--offline` 的结果是 19 通过、3 跳过（两个 torch 阶段，加上被 `--offline`
+跳过的真实 rollout）。
 
 **跑一整轮** —— 不经浏览器执行一次真实任务，打印事件日志、投影出的消息、用量与工作区文件：
 
@@ -372,6 +428,48 @@ cd backend && python ../tools/harness_probe.py --prompt "在工作区建一个 h
 ```
 
 加 `--keep` 保留会话与工作区以便检查。
+
+## 🧪 深研场：Deep Research 的 Agentic RL 环境
+
+`rl/` 把上面这个 Agent Runtime 变成一个**可复现、离线、确定性**的多跳检索强化学习环境。
+环境、奖励和验证器本身就是产出物，每个设计决定都有实测数字。完整设计与全部测量见
+**[rl/README.md](rl/README.md)**；在 GPU 机上从克隆到训练，见 [rl/GPU_QUICKSTART.md](rl/GPU_QUICKSTART.md)。
+
+**先推翻了自己的第一版。** 第一版建在自建的 50k 篇 arXiv 语料上，实测「按描述找论文」是一步
+到位的：取摘要里最罕见的 8 个词去检索它自己，top-1 命中 100%；删掉全部语料罕见词后再取，
+仍然 100%。难度必须来自语料里**存在可混淆的近似文档**——这是语料的性质，改措辞改不动。
+于是换成 HotpotQA distractor：
+
+| 同一组测量 | arXiv 50k | HotpotQA 66.6k |
+|---|---|---|
+| 第二名 / 第一名 BM25 得分比（中位） | 0.28 | **0.84** |
+| 存在 >0.8 强竞争者的比例 | 0% | **58%** |
+
+**泄漏过滤是最关键的一道。** 近一半题目能被模型闭卷答对，不过滤就是在奖励背诵而不是检索。
+两个模型的泄漏集互不包含，所以泄漏是（题目, 模型）的性质，正确做法是取并集：
+
+```
+7405 题 → − 闭卷可答 3684（49.8%）→ − 覆盖不全 897 → 保留 2824
+                                                   train 1908 · dev 457 · test 459（各记 sha256）
+```
+
+| 组成 | 位置 |
+|---|---|
+| 冻结语料 + 手写 BM25（66,581 段，sha256 入清单，rollout 期零网络） | `backend/harness/corpus/` |
+| 三个动作 `corpus_search` / `corpus_open` / `corpus_answer`，全部只读 | `backend/harness/data/tools/corpus.json` |
+| 精确验证器：EM / F1、引用扎实度、反作弊；塑形项门控在正确性之后 | `rl/verifiers/` |
+| 并发多轮 rollout（连续补位），每条轨迹盖上环境指纹 | `rl/rollout/` |
+| chat template 入库钉死、token 级 loss mask、前缀性质断言 | `rl/env/`、`rl/train/pack.py` |
+| SFT 冷启动、GRPO（token 级归一化）、vLLM LoRA 热插拔 | `rl/train/` |
+
+**架构上的主张**：给一个已有的 Agent Runtime 加上完整的 RL 环境，环境本身对 `backend/` 的改动全是**新增**——
+语料包 `harness/corpus/`、一个工具模块、一个预设及其提示词与工具契约——外加两个配置字段和工具注册表
+门禁里的一行。`agent.py` / `projection.py` / `events.py` / `context.py` / `approval.py` **一行未改**。
+（此外有一处前置重构：`contained_path` 从 `services/` 挪进了 `core/`——`harness/` 经它间接依赖了
+FastAPI，`rl/` 因此根本导入不了 harness。）`HARNESS_CORPUS_ENABLED` 默认关闭，线上站点的工具集不受影响。
+
+除训练本身外，全部在 Raspberry Pi 5 上跑通并通过自检；训练入口在没有 GPU 时会提前退出，
+说明缺哪个包、怎么装，而不是抛一个 `ModuleNotFoundError`。
 
 ## 🚀 快速启动
 
@@ -421,11 +519,17 @@ docker compose up -d
 | `COOKIE_SECURE` | 是否仅 HTTPS 发送 Cookie | `false`（开发）/ `true`（生产） |
 | `ALLOWED_ORIGINS` | CORS 白名单 | `http://localhost:8000` |
 | `DEV_RELOAD` | 热重载，**仅本地开发** | `false` |
+| `HARNESS_ENABLED` | 是否提供 Harness 工作台 | `true` |
 | `HARNESS_REQUIRE_ADMIN` | Harness 仅管理员可用，公网部署保持 `true` | `true` |
 | `HARNESS_SHELL_ENABLED` | 是否给 Agent `bash` 工具（读完安全模型再开） | `false` |
+| `HARNESS_SHELL_TIMEOUT_SECONDS` | 单条命令的墙钟上限，超时杀整个进程组 | `30` |
+| `HARNESS_SHELL_MAX_OUTPUT_BYTES` | 单条命令回给模型的输出上限（stdout / stderr 各自计），超出截断 | `32768` |
 | `HARNESS_PRESET` | 运行模式 | `standard \| minimal` |
 | `HARNESS_MODEL` | Harness 专用模型，留空跟随 provider | 空 |
+| `HARNESS_MAX_STEPS` | 单轮最多几步（一步 = 一次模型调用 + 它发起的工具调用） | `24` |
 | `HARNESS_MAX_TOKENS` | 单次模型调用的输出上限。太小会把较大的 `write` 从参数中间截断，而截断的工具调用无法恢复 | `8192` |
+| `HARNESS_CONTEXT_BUDGET_TOKENS` | 触发上下文压缩的阈值，按 provider 回报的真实 `prompt_tokens` 计 | `48000` |
+| `HARNESS_SEARCH_URL` | `web_search` 的检索端点，留空用内置 DuckDuckGo | 空 |
 | `HARNESS_WORKSPACE_QUOTA_MB` | 每个会话工作区容量上限 | `64` |
 | `HARNESS_SUBAGENT_ENABLED` | 是否提供 `subagent` 工具 | `true` |
 | `HARNESS_SUBAGENT_MAX_DEPTH` | 派发层数上限（子代理不能再派） | `1` |
