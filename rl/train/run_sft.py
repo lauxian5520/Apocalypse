@@ -176,5 +176,20 @@ def main() -> int:
     return args.func(args)
 
 
+def _run_reporting_oom(entry) -> int:
+    """Turn a CUDA OOM into the one instruction that usually fixes it.
+
+    The OOM class lives on torch, which is imported lazily and may be absent;
+    matching the name keeps this module importable without it.
+    """
+    try:
+        return entry()
+    except Exception as e:                      # noqa: BLE001 — re-raised below
+        if type(e).__name__ != "OutOfMemoryError":
+            raise
+        from rl.train import preflight   # torch-free; safe to import here
+        raise SystemExit(preflight.oom_message()) from e
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_run_reporting_oom(main))

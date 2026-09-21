@@ -27,11 +27,25 @@
 git clone https://github.com/lauxian5520/Apocalypse.git
 cd Apocalypse
 
-# Python 3.11 或 3.12。不要用 3.13+：torch 的轮子还没跟上
+# 用 Python 3.12：下面的依赖解析就是在 3.12 上实测通过的
 conda create -n rl python=3.12 -y && conda activate rl
 
 pip install -r rl/requirements.txt -r rl/requirements-trainer.txt
 ```
+
+实测（2026-09-21）：在 x86_64 · Python 3.12 · glibc 2.35（Ubuntu 22.04）下，这两个文件一起能解析，
+得到 `vllm 0.29.0`、`torch 2.13.0`、`transformers 5.17.0`、`peft 0.21.0`。vLLM 会**精确锁定** torch
+版本，所以 torch 的版本由它决定，文件里只写下限。
+
+**装之前确认三件事**，每一件都能让第一步就失败：
+
+| | 要求 | 不满足会怎样 |
+|---|---|---|
+| 系统 | glibc ≥ 2.31，即 Ubuntu 20.04 及以上 | vLLM 依赖的 `llguidance` 只发了 `manylinux_2_31` 的轮子，pip 报「找不到版本」 |
+| 网络 | 国内机器先 `export HF_ENDPOINT=https://hf-mirror.com` | 语料、tokenizer、权重全部从 Hub 下载；这个变量对 transformers、vLLM 和第 2 步的语料下载都生效 |
+| 磁盘 | 系统盘小的机器，`export HF_HOME=<数据盘>/hf` | vLLM 与 torch 的轮子加上 1.5B / 7B 权重有二三十 GB |
+
+建议把这两个 `export` 写进 `~/.bashrc`，第 4 步另开的终端里也需要它们。
 
 `rl/requirements.txt` 里的 `sqlalchemy` / `pydantic-settings` / `httpx` 不是可选的：
 `rl/` 以库的方式 import `backend/harness`，而 `harness/__init__.py` 是一个 eager facade，
@@ -58,7 +72,8 @@ python -m rl.cli setup
 python -m rl.checks.rl_check --offline
 ```
 
-期望 **20 个阶段全绿**（GPU 机上 torch 可用，所以两个 torch 阶段不会跳过）。
+期望 **通过 21 · 跳过 1**：GPU 机上 torch 可用，两个 torch 阶段不再跳过；跳过的那一个是
+需要 API 的真实 rollout，`--offline` 本来就不跑它。
 任何一个红的都先解决再往下走——这些断言存在的理由就是它们守的那些错都是静默的。
 
 ## 4. 冒烟：先花 5 分钟，别直接烧几小时
@@ -66,7 +81,8 @@ python -m rl.checks.rl_check --offline
 ```bash
 # 起 vLLM（独立进程）。VLLM_ALLOW_RUNTIME_LORA_UPDATING 必须设
 VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 vllm serve Qwen/Qwen2.5-0.5B-Instruct \
-    --enable-lora --max-lora-rank 32 --max-loras 1 --port 8000 &
+    --enable-lora --max-lora-rank 32 --max-loras 1 --port 8000 \
+    --gpu-memory-utilization 0.35 &
 
 # 另开一个终端
 python -m rl.train.run_grpo --smoke --base Qwen/Qwen2.5-0.5B-Instruct
@@ -74,6 +90,13 @@ python -m rl.train.run_grpo --smoke --base Qwen/Qwen2.5-0.5B-Instruct
 
 `--smoke` 是 2 题 · G=2 · 1 步，每步都换权重都评测——**把全链路走一遍**：
 rollout → 打分 → 分词打 mask → advantage → 前向反向 → 存 adapter → 热插拔 → 评测。
+
+**`--gpu-memory-utilization 0.35` 不能省。** vLLM 会按这个比例预占**整张卡**给 KV cache，默认值是
+0.9。它先启动、训练进程后启动，在同一张 24 GB 的卡上训练只剩约 2.4 GB，比 1.5B 模型的 bf16
+权重（约 3 GB）还小，于是 OOM，而报错里没有任何一处指向 vLLM。0.35 给 vLLM 约 8 GB，对 1.5B 的
+rollout 足够。训练入口启动时会打印空闲显存，低于 6 GB 会给出这条提示；真 OOM 时也会给出同样
+的提示，而不是一段堆栈。有两张卡的话，更干净的做法是 `CUDA_VISIBLE_DEVICES=1 vllm serve …`，
+训练留在 0 号卡。
 
 不设 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=1` 会怎样：热插拔端点返回 404，
 每次换权重**静默失效**，整个训练全程都在采样基座模型——loss 曲线会动，reward 不会动，
@@ -85,9 +108,16 @@ GRPO 的 advantage 是「奖励减去同题其他 rollout 的均值」。如果�
 组内标准差为 0，**每条的 advantage 精确为 0，梯度精确为 0**。1.5B 模型直接上多跳检索
 就是这个状态：烧几小时 GPU，reward 一条直线，而 loss 曲线看起来很平静。
 
+教师模型走 API，所以先配 key（`.env` 不随仓库，新克隆里没有）：
+
+```bash
+cp .env.example .env      # 然后填 AI_PROVIDER=deepseek 与 DEEPSEEK_API_KEY
+```
+
 ```bash
 # 采集：教师模型走同一个环境、同一套工具（需要 provider，不需要 GPU）
-python -m rl.train.run_sft collect --split train -n 400 -G 4 \
+# -n 0 表示整个 train 切分（1908 题）
+python -m rl.train.run_sft collect --split train -n 0 -G 4 --concurrency 8 \
     --model deepseek-chat --out rl/data/sft/teacher.jsonl
 
 # 训练
@@ -96,8 +126,18 @@ python -m rl.train.run_sft train \
     --base Qwen/Qwen2.5-1.5B-Instruct --out rl/data/adapters/sft
 ```
 
-`collect` 不需要 GPU，可以在别的机器上提前跑好再拷过来——它要花数小时，
-让一张卡空等是浪费。
+**在租卡之前做这一步。** `collect` 不需要 GPU，在任何能跑 rollout 的机器上（包括开发用的 Pi）
+提前跑好，再把 `teacher.jsonl` 拷过来。按仓库里 6 条真实轨迹实测：每条平均 3.3 次模型调用、
+约 14 秒、约 $0.0009（deepseek flash 档费率）。
+
+| 规模 | rollout 数 | 费用 | 墙钟（并发 8） | 最多可训练条数 |
+|---|---|---|---|---|
+| `-n 400 -G 4` | 1,600 | 约 $1.4 | 约 45 分钟 | 800 |
+| `-n 0 -G 4`（全部 1908 题） | 7,632 | 约 $7 | 约 3.7 小时 | 3,816 |
+
+「最多」是因为每题最多保留 2 条（`MAX_PER_QUESTION`，防止几道简单题占满数据），实际再乘上
+教师的通过率。计划要 2–5k 条，所以用全量；400 题大概只能得到几百条。
+让一张卡空等几个小时的采集是纯浪费。
 
 **闸门**：SFT 之后在 dev 上 pass@1 没有大致翻倍、格式合法率没上 95%，
 就停下来查，别碰 GRPO。
@@ -106,7 +146,8 @@ python -m rl.train.run_sft train \
 
 ```bash
 VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 vllm serve Qwen/Qwen2.5-1.5B-Instruct \
-    --enable-lora --max-lora-rank 32 --max-loras 1 --port 8000 &
+    --enable-lora --max-lora-rank 32 --max-loras 1 --port 8000 \
+    --gpu-memory-utilization 0.35 &
 
 python -m rl.train.run_grpo \
     --base Qwen/Qwen2.5-1.5B-Instruct \
@@ -130,7 +171,8 @@ python -m rl.train.run_grpo \
 
 ## 7. 显存不够时
 
-按这个顺序调，前面的代价小：
+先确认 vLLM 带了 `--gpu-memory-utilization 0.35`（见第 4 步）——那是最常见的原因，
+而且和下面这些参数都无关。然后按这个顺序调，前面的代价小：
 
 1. `--micro-batch-size 1`（默认就是）
 2. `--max-tokens 768`（默认 1024）

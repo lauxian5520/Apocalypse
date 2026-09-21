@@ -45,7 +45,21 @@ from harness.corpus.schema import Doc
 
 logger = logging.getLogger(__name__)
 
-HF_BASE = "https://huggingface.co/datasets/hotpotqa/hotpot_qa/resolve/main/distractor"
+HF_DATASET_PATH = "datasets/hotpotqa/hotpot_qa/resolve/main/distractor"
+DEFAULT_HF_ENDPOINT = "https://huggingface.co"
+
+
+def hf_base() -> str:
+    """The dataset root on the Hub, honouring `HF_ENDPOINT`.
+
+    huggingface.co is unreachable from most mainland-China GPU rentals, and the
+    standard fix there is `export HF_ENDPOINT=https://hf-mirror.com`. transformers
+    and vLLM both honour that variable for tokenizers and weights; a hard-coded
+    URL here meant the one download that runs *first* — `setup`, before anything
+    else touches the network — ignored it and failed on its own.
+    """
+    endpoint = os.environ.get("HF_ENDPOINT", "").strip() or DEFAULT_HF_ENDPOINT
+    return f"{endpoint.rstrip('/')}/{HF_DATASET_PATH}"
 SPLIT_FILES = {
     "validation": ["validation-00000-of-00001.parquet"],
     "train": ["train-00000-of-00002.parquet", "train-00001-of-00002.parquet"],
@@ -125,16 +139,24 @@ def download(split: str, dest_dir: str) -> list[str]:
             paths.append(path)
             continue
 
-        url = f"{HF_BASE}/{name}"
+        url = f"{hf_base()}/{name}"
         logger.info("downloading %s", url)
         partial = path + ".partial"
-        with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as resp, \
-                open(partial, "wb") as f:
-            while True:
-                chunk = resp.read(CHUNK)
-                if not chunk:
-                    break
-                f.write(chunk)
+        try:
+            with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as resp, \
+                    open(partial, "wb") as f:
+                while True:
+                    chunk = resp.read(CHUNK)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+        except OSError as e:          # URLError, timeouts and resets are all OSError
+            if os.path.exists(partial):
+                os.remove(partial)
+            hint = ("" if os.environ.get("HF_ENDPOINT") else
+                    "\n  国内的 GPU 机通常访问不到 huggingface.co，先设置镜像再重试：\n"
+                    "    export HF_ENDPOINT=https://hf-mirror.com")
+            raise RuntimeError(f"下载 {url} 失败：{e}{hint}") from e
         os.replace(partial, path)
         paths.append(path)
     return paths

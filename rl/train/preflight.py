@@ -89,9 +89,43 @@ def describe_device(device: str) -> str:
             )
         index = torch.cuda.current_device()
         name = torch.cuda.get_device_name(index)
-        total = torch.cuda.get_device_properties(index).total_memory / 1e9
-        return f"{name} · {total:.0f} GB · torch {torch.__version__}"
+        free, total = torch.cuda.mem_get_info(index)
+        line = (f"{name} · {total / 1e9:.0f} GB · 空闲 {free / 1e9:.1f} GB · "
+                f"torch {torch.__version__}")
+        if free < LOW_FREE_BYTES:
+            line += "\n" + _vllm_share_hint(free)
+        return line
     return f"CPU · torch {torch.__version__}（仅适合 --smoke，正式训练会慢到不可用）"
+
+
+# Below this the trainer is unlikely to fit even the 0.5B smoke model once
+# activations and the 150k-vocab logits are counted.
+LOW_FREE_BYTES = 6 * 1024**3
+
+
+def _vllm_share_hint(free: int) -> str:
+    """Why a GPU that is 'available' has no room, and the flag that fixes it.
+
+    vLLM pre-allocates `--gpu-memory-utilization` of the *whole* card for its
+    KV cache, and the default is 0.9. Started first on the same GPU — which is
+    what the quickstart does — it leaves the trainer about a tenth of the card:
+    2.4 GB of a 24 GB 4090, less than the 1.5B model's bf16 weights alone. The
+    result is an OOM with nothing in it pointing at vLLM.
+    """
+    return (
+        f"  ⚠ 只剩 {free / 1e9:.1f} GB 空闲。若 vLLM 与训练共用这张卡，vLLM 默认会预占 90% 显存。\n"
+        "    重启 vLLM 时加 --gpu-memory-utilization 0.35，或用 CUDA_VISIBLE_DEVICES 把它放到另一张卡上。"
+    )
+
+
+def oom_message() -> str:
+    """What to say when training runs out of memory anyway."""
+    return (
+        "显存不足（CUDA out of memory）。\n"
+        "  1. 若 vLLM 在同一张卡上：启动时加 --gpu-memory-utilization 0.35（默认 0.9 会占掉九成显存）\n"
+        "  2. 仍不够：依次调小 --max-tokens、--batch-size、-G，或先换 0.5B 基座跑通\n"
+        "     详见 rl/GPU_QUICKSTART.md「显存不够时」"
+    )
 
 
 def warn_if_no_nvidia_smi() -> str:
