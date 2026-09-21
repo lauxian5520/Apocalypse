@@ -183,6 +183,41 @@ python -m rl.train.run_grpo \
 trainer 和 vLLM 是**两个进程**，各自一个显存分配器。24 GB 卡上这是装得下与装不下的差别，
 代价是权重通过 LoRA 热插拔而不是直接拷贝——也就是第 4 步那个环境变量必须设的原因。
 
+### 有两张卡：一个进程一张
+
+显存压力来自 vLLM 和训练挤在同一张卡上，所以第二张卡最有效的用法是**把两者分开**。
+不用改代码：
+
+```bash
+# 1 号卡只给 vLLM。独占一张卡时不需要再压 --gpu-memory-utilization
+CUDA_VISIBLE_DEVICES=1 VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 vllm serve Qwen/Qwen2.5-1.5B-Instruct \
+    --enable-lora --max-lora-rank 32 --max-loras 1 --port 8000 &
+
+# 0 号卡只给训练
+CUDA_VISIBLE_DEVICES=0 python -m rl.train.run_grpo --base Qwen/Qwen2.5-1.5B-Instruct …
+```
+
+每个进程只看得见自己那张卡，在进程内都是 `cuda:0`，所以训练的 `--device` 保持默认即可。
+
+**多卡数据并行训练（DDP / `torchrun`）目前不支持**，而且它也不解决显存问题：数据并行是在
+每张卡上各放一份**完整**模型，省的是时间，不是单卡显存。真要降单卡显存得做分片（FSDP /
+ZeRO），对 1.5B 来说杀鸡用牛刀。vLLM 自己的 `--tensor-parallel-size` 同理，1.5B 的权重只有 3 GB，
+切开只会增加卡间通信。
+
+### 显存峰值在哪
+
+训练一步里最大的张量是整条序列 × 整个词表（151,936）的 logits 和它的 `log_softmax`，
+随轨迹长度线性增长。按仓库里的真实轨迹：平均约 2,000 token，而 `MAX_SEQUENCE_TOKENS`
+把单条上限卡在 8,192。一份这样的 bf16 张量在 2,000 token 时约 0.6 GB，在 8,192 时约 2.5 GB；
+一步里同时存在的有好几份（logits、`log_softmax`、熵、反向时的梯度），模型若把 logits 升成
+fp32 还要再翻倍。所以常规长度的轨迹在 24 GB 卡上与 vLLM 共存问题不大，接近上限的长轨迹才是
+风险。以冒烟测试时 `nvidia-smi` 的实测为准。
+
+真到了不够的时候，比加卡更划算的是**只在需要的位置算 log-prob**：计入 loss 的 token 只占约
+10%（其余是工具返回的检索结果，本来就被 mask 掉），现在却对全部位置都算了全词表的
+`log_softmax`。只对计入 loss 的位置取 hidden state 再过 `lm_head`，这部分峰值能降一个数量级。
+这个优化还没做——训练路径没在真 GPU 上跑过，先让冒烟测试告诉我们它是否必要。
+
 ---
 
 ## 附：如果想自己重跑泄漏过滤

@@ -87,7 +87,12 @@ def describe_device(device: str) -> str:
                 "  - 在 GPU 机上：检查驱动与 torch 的 CUDA 版本是否匹配\n"
                 "  - 只想验证链路：加 --device cpu（会非常慢，只适合 --smoke）"
             )
-        index = torch.cuda.current_device()
+        # Report the card the trainer will actually use. `current_device()` is
+        # always 0 unless someone called set_device, so `--device cuda:1` would
+        # otherwise print — and warn about — the card vLLM is sitting on.
+        index = torch.device(device).index
+        if index is None:
+            index = torch.cuda.current_device()
         name = torch.cuda.get_device_name(index)
         free, total = torch.cuda.mem_get_info(index)
         line = (f"{name} · {total / 1e9:.0f} GB · 空闲 {free / 1e9:.1f} GB · "
