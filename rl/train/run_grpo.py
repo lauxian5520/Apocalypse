@@ -182,10 +182,12 @@ def main() -> int:
 
     store = load_cached(corpus_dir(), False)
     registry = ToolRegistry(PRESET)
+    from rl.env.build import prompt_sha256
     stamp = EnvStamp(
         corpus_sha256=store.manifest.docs_sha256, corpus_docs=len(store),
         preset=PRESET, max_steps=registry.max_steps, model=args.base,
         template_sha256=template.template_sha256(),
+        prompt_sha256=prompt_sha256(registry),
     )
 
     tasks = split_mod.load(args.splits_dir, args.split)

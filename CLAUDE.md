@@ -405,8 +405,8 @@ only way those two can be guaranteed to agree. The training machinery wrapped ar
 
 **The environment is data, and the data is hashed.** A reward means nothing except relative to a
 corpus and a preset, so `EnvStamp` (corpus sha256, preset, `max_steps`, model, chat-template
-sha256) is written into every trajectory, and `export_verl.verify()` *refuses* a file mixing two
-stamps. `corpus verify` re-hashes `docs.jsonl` against its manifest. Splits are frozen JSONL with
+sha256, system-prompt sha256) is written into every trajectory, and `export_verl.verify()`
+*refuses* a file mixing two stamps. `corpus verify` re-hashes `docs.jsonl` against its manifest. Splits are frozen JSONL with
 their own hashes.
 
 **Three seams are reused rather than reimplemented**, which is what the Harness's Protocols were
@@ -420,6 +420,12 @@ and which has no seed); `rl/env/build.py` constructs `HarnessContext` directly i
 - **Never call `compose_prompt()` for a rollout.** It appends `runtime_context()`, which carries
   *today's date*. A trajectory collected on Tuesday then re-tokenises differently on Wednesday and
   the loss mask's prefix property breaks. `rl/env/build.py::pinned_system_prompt` exists for this.
+- **The system prompt is part of the environment, and it is the one part no schema checks.**
+  `deepresearch.md` was committed still describing the discarded arXiv corpus — telling
+  the model to search *papers* and call `corpus_open(arxiv_id)`, a parameter that does not exist.
+  Edit it only together with the verifiers it describes; the `提示词与工具契约一致` stage checks
+  every `tool(params)` it names against the contract, and `prompt_sha256` in the stamp keeps
+  trajectories collected under different prompts from being exported together.
 - **Compaction must stay off.** `maybe_compact` runs every step and rewrites the *system* message
   when it fires, which also breaks the prefix property — silently. The budget is set unreachably
   high and `assert_no_compaction()` checks the log rather than trusting the budget.

@@ -30,6 +30,14 @@ class EnvStamp:
     # Set once the training-time adapter exists; pins the chat template so a
     # re-tokenization months later cannot silently use a different one.
     template_sha256: str = ""
+    # The system prompt is part of the task definition as much as the tools
+    # are: rewording it changes what the policy is asked to do. Without it here
+    # a trajectory collected under one prompt and one collected under another
+    # carried identical stamps, and export_verl.verify() — which exists to
+    # refuse mixed environments — waved them through together. Empty on
+    # trajectories recorded before the field existed, which therefore never
+    # compare equal to one that has it.
+    prompt_sha256: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)

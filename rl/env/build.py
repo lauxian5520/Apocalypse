@@ -26,6 +26,7 @@ requirement of training rather than a preference:
 Everything else — the loop, the projection, the event vocabulary — is the
 harness's, unmodified. That is the point.
 """
+import hashlib
 import logging
 
 from core.config import get_settings
@@ -74,6 +75,11 @@ def pinned_system_prompt(registry: ToolRegistry) -> str:
     changes with the calendar cannot be part of a frozen dataset.
     """
     return registry.system_prompt()
+
+
+def prompt_sha256(registry: ToolRegistry) -> str:
+    """Fingerprint of the exact prompt a rollout will send, for `EnvStamp`."""
+    return hashlib.sha256(pinned_system_prompt(registry).encode("utf-8")).hexdigest()
 
 
 def build_env_context(

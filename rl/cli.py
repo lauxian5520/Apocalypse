@@ -366,12 +366,14 @@ def _cmd_rollout(args: argparse.Namespace) -> int:
 
     from harness.tools.registry import ToolRegistry
     registry = ToolRegistry(PRESET)
+    from rl.env.build import prompt_sha256
     stamp = EnvStamp(
         corpus_sha256=store.manifest.docs_sha256,
         corpus_docs=len(store),
         preset=PRESET,
         max_steps=registry.max_steps,
         model=llm.model,
+        prompt_sha256=prompt_sha256(registry),
     )
 
     weights = reward_verifier.Weights.outcome_only() if args.outcome_only else reward_verifier.Weights()

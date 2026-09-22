@@ -159,6 +159,46 @@ def check_preset() -> str:
     return f"{len(names)} 个动作 · max_steps {registry.max_steps} · 全部 read 权限"
 
 
+def check_prompt_matches_contract() -> str:
+    """The prompt must describe the tools the environment actually has.
+
+    It is the half of the task definition no schema validates, and it drifted
+    once already: after the arXiv corpus was discarded the prompt still told the
+    model it was searching *papers*, to call `corpus_open(arxiv_id)` — a
+    parameter that does not exist — and to answer with a paper id. Every rollout
+    since had been asked to do a task the environment does not grade. So: each
+    `tool(params)` written in the prompt must name a tool in the preset with
+    exactly those parameters, and every tool in the preset must be named.
+    """
+    import re
+    from harness.tools.registry import ToolRegistry
+    from rl.env.build import PRESET, pinned_system_prompt
+
+    registry = ToolRegistry(PRESET)
+    prompt = pinned_system_prompt(registry)
+    contracts = {
+        s["function"]["name"]: set(s["function"]["parameters"].get("properties", {}))
+        for s in registry.schemas()
+    }
+
+    written = re.findall(r"`([a-z_]+)\(([^)`]*)\)`", prompt)
+    if not written:
+        raise AssertionError("提示词里没有写出任何工具签名，无法与契约核对")
+    for name, params in written:
+        if name not in contracts:
+            raise AssertionError(f"提示词写了 {name}()，但本环境没有这个工具")
+        said = {p.strip() for p in params.split(",") if p.strip()}
+        if said != contracts[name]:
+            raise AssertionError(
+                f"提示词写的是 {name}({', '.join(sorted(said))})，"
+                f"契约参数是 {sorted(contracts[name])}")
+    missing = set(contracts) - {name for name, _ in written}
+    if missing:
+        raise AssertionError(f"提示词没有提到这些工具：{sorted(missing)}")
+    return (f"{len(written)} 个工具签名与契约一致 · "
+            f"提示词 {len(prompt)} 字符")
+
+
 def check_module_gate() -> str:
     """With the gate off, the production preset must be exactly what it was."""
     from harness.tools.registry import ToolRegistry, _gated_off
@@ -1064,6 +1104,7 @@ async def main() -> int:
     else:
         record("检索确定性", SKIP, "语料不可用")
     await stage("动作空间与预设", check_preset)
+    await stage("提示词与工具契约一致", check_prompt_matches_contract)
     await stage("模块门禁", check_module_gate)
 
     print("\n轨迹与验证器")

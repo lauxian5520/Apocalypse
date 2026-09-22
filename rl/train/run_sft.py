@@ -61,9 +61,11 @@ def collect(args) -> int:
            if args.base_url else
            EvalAdapter.from_settings(args.model, temperature=args.temperature))
     registry = ToolRegistry(PRESET)
+    from rl.env.build import prompt_sha256
     stamp = EnvStamp(
         corpus_sha256=store.manifest.docs_sha256, corpus_docs=len(store),
         preset=PRESET, max_steps=registry.max_steps, model=llm.model,
+        prompt_sha256=prompt_sha256(registry),
     )
 
     print(f"采样 {len(tasks)} 题 × G={args.group_size} · 模型 {llm.model} · 并发 {args.concurrency}")
