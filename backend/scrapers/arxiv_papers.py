@@ -3,7 +3,7 @@ arXiv recent papers scraper — replacing google scholar to provide daily/weekly
 """
 import httpx
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 def build_arxiv_query() -> str:
     # We query AI, CV, CL, LG (machine learning and AI related categories)
@@ -28,7 +28,7 @@ async def fetch(period: str = "daily", limit: int = 200) -> list[dict]:
             root = ET.fromstring(resp.text)
             ns = {'atom': 'http://www.w3.org/2005/Atom'}
             
-            base_date = datetime.utcnow()
+            base_date = datetime.now(timezone.utc)
             cutoff_date = base_date - timedelta(days=days)
             
             for entry in root.findall('atom:entry', ns):
@@ -37,13 +37,14 @@ async def fetch(period: str = "daily", limit: int = 200) -> list[dict]:
                 link = entry.find('atom:id', ns).text.strip()
                 published_text = entry.find('atom:published', ns).text.strip()
                 
-                # Strict date filtering
+                # Compare the full UTC timestamp: truncating to midnight drops
+                # otherwise valid papers on the cutoff day.
                 try:
-                    pub_date = datetime.strptime(published_text[:10], "%Y-%m-%d")
+                    pub_date = datetime.fromisoformat(published_text.replace("Z", "+00:00"))
                     if pub_date < cutoff_date:
-                        continue # Skip this paper entirely if it's too old
-                except:
-                    pass
+                        continue
+                except ValueError:
+                    continue
                 
                 authors = [author.find('atom:name', ns).text for author in entry.findall('atom:author', ns)]
                 year = published_text[:4] if published_text else ""

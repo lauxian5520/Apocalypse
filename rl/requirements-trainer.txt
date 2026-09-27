@@ -34,7 +34,6 @@
 # on the box, precisely because of that.
 
 torch>=2.9
-transformers>=4.51
 vllm>=0.27
 peft>=0.15
 accelerate>=1.6

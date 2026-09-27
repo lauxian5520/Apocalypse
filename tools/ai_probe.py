@@ -18,15 +18,17 @@ PROMPT = [
 ]
 
 
-async def main() -> None:
+async def main() -> int:
     cfg = provider_config()
     print(f"provider = {cfg['model']} @ {cfg['url']}")
     print(f"api key  = {'set' if cfg['key'] else 'MISSING'}")
 
+    failed = False
     try:
         reply = await ai_service.chat(PROMPT)
         print("blocking  OK:", reply[:120])
     except Exception:
+        failed = True
         print("blocking  FAILED")
         traceback.print_exc()
 
@@ -38,9 +40,12 @@ async def main() -> None:
                 break
         print("streaming OK:", "".join(chunks)[:120])
     except Exception:
+        failed = True
         print("streaming FAILED")
         traceback.print_exc()
 
+    return 1 if failed else 0
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(asyncio.run(main()))
