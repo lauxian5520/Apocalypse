@@ -332,13 +332,15 @@ VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 vllm serve Qwen/Qwen2.5-1.5B-Instruct \
     --enable-lora --max-lora-rank 32 --max-loras 1 --port 8000
 
 # 4. 先冒烟（2 题 · G=2 · 1 步），再正式跑
-python -m rl.train.run_grpo --smoke --base Qwen/Qwen2.5-0.5B-Instruct
+python -m rl.train.run_grpo --smoke --base Qwen/Qwen2.5-1.5B-Instruct
 python -m rl.train.run_grpo --base Qwen/Qwen2.5-1.5B-Instruct \
     --adapter rl/data/adapters/sft --steps 500 -G 8 --questions-per-step 8
 
-# 自检：21 个离线阶段 + 1 个真实 rollout（其中 2 个阶段需要 torch，没装时跳过）
+# 自检：含 Qwen3 模板与多卡布局检查；其中 2 个阶段需要 torch
 python -m rl.checks.rl_check --offline
 ```
+
+单机多卡的 Qwen3 8B 示例与 GPU 分配参数见 [GPU_QUICKSTART.md](GPU_QUICKSTART.md#模型超过单卡显存fsdp2-训练--vllm-张量并行)。
 
 环境自检遵循仓库既有约定（无 pytest，`check_*` 成功返回描述串、失败抛异常、
 非零退出），可直接接进部署脚本。
@@ -363,8 +365,8 @@ python -m rl.checks.rl_check --offline
 | 训练循环编排（课程 / 指标 / 告警） | ✅ stub hooks 全路径 |
 | LoRA 热插拔接线 | ✅ 本地 stub 服务验证两条分支 |
 
-`python -m rl.checks.rl_check` —— **20 个阶段全绿**（2 个 torch 阶段在默认解释器上跳过，
-在 py311 里单独验过）。
+`python -m rl.checks.rl_check --offline` 检查语料、轨迹、两代 Qwen 模板、训练编排与多卡布局；
+没有 torch 的解释器会跳过数值损失阶段。
 
 **需要 GPU 才能跑**（代码已写完，缺的是卡）：
 

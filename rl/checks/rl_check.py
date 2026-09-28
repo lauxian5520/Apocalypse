@@ -451,6 +451,62 @@ def check_loss_mask() -> str:
             f"可训练 token 占 {trainable / max(total, 1):.0%}")
 
 
+def check_qwen3_no_think() -> str:
+    """Qwen3 non-thinking prompts must remain prefixes after later tool turns."""
+    from harness.tools.registry import ToolRegistry
+    from rl.env import template
+    from rl.env.build import PRESET
+    from rl.rollout.trajectory import read_jsonl
+
+    template.configure("Qwen/Qwen3-8B")
+    try:
+        tok = template.tokenizer()
+        tools = ToolRegistry(PRESET).schemas()
+        checked = 0
+        for trajectory in read_jsonl(trajectory_paths()[0]):
+            packed = template.pack(trajectory.session_events(), tools)
+            packed.check()
+            for span in packed.segments:
+                generated = tok.decode(packed.token_ids[span.start:span.end])
+                if "<think>" in generated:
+                    raise AssertionError("Qwen3 非思考前缀进入生成区域")
+            checked += 1
+        return f"{checked} 条多轮轨迹 · prompt 前缀稳定 · 思考标记不进入 loss"
+    finally:
+        template.configure(template.TOKENIZER_HUB_ID)
+
+
+def check_multi_gpu_layout() -> str:
+    from rl.train import distributed
+    from rl.train.launch_vllm import command
+
+    old = os.environ.get("CUDA_VISIBLE_DEVICES")
+    old_world = os.environ.get("WORLD_SIZE")
+    try:
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5"
+        os.environ["WORLD_SIZE"] = "6"
+        distributed.validate_gpu_layout("6,7", 2)
+        try:
+            distributed.validate_gpu_layout("5,6", 2)
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError("训练与 vLLM GPU 重叠未被拒绝")
+        argv, env = command("Qwen/Qwen3-8B", "6,7", 2, 8000, 0.85, 16384)
+        if env["CUDA_VISIBLE_DEVICES"] != "6,7" or "--tensor-parallel-size" not in argv:
+            raise AssertionError("vLLM 启动参数没有隔离两张推理卡")
+        return "6 张训练卡 + 2 张推理卡校验通过 · GPU 重叠被拒绝"
+    finally:
+        if old is None:
+            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+        else:
+            os.environ["CUDA_VISIBLE_DEVICES"] = old
+        if old_world is None:
+            os.environ.pop("WORLD_SIZE", None)
+        else:
+            os.environ["WORLD_SIZE"] = old_world
+
+
 def check_policy_adapter() -> str:
     """The training-time adapter's parsing and self-checks, without a server.
 
@@ -551,6 +607,18 @@ def check_grpo_loss() -> str:
     if logits.grad is None or not torch.isfinite(logits.grad).all():
         raise AssertionError("梯度不存在或非有限")
 
+    sparse_logits = logits.detach().clone().requires_grad_(True)
+    positions = grpo.selected_positions(mask)
+    sparse_loss, sparse_stats = grpo.selected_token_loss(
+        sparse_logits[:, positions], ids, mask, positions, advantages,
+        logp_old.clone(), ref_logp=logp_old.clone())
+    sparse_loss.backward()
+    if not torch.allclose(sparse_loss, loss, atol=1e-6) or not torch.allclose(
+            sparse_logits.grad, logits.grad, atol=1e-6):
+        raise AssertionError("仅计算 mask 位置时 GRPO loss/梯度与完整 logits 不一致")
+    if not torch.allclose(sparse_stats["mean_ratio"], stats["mean_ratio"], atol=1e-6):
+        raise AssertionError("稀疏 logits 改变了采样概率比")
+
     # Token-level must not equal per-sequence averaging.
     mask2 = torch.zeros(B, T)
     mask2[0, 1:] = 1
@@ -576,6 +644,9 @@ def check_grpo_loss() -> str:
         raise AssertionError("完美预测下 SFT 交叉熵应为 0——位移方向错了")
     if grpo.masked_cross_entropy(logits, ids, torch.zeros(B, T)).item() != 0.0:
         raise AssertionError("全零 mask 下交叉熵必须是 0，不能是 NaN")
+    sparse_ce = grpo.selected_cross_entropy(logits[:, positions], ids, mask, positions)
+    if not torch.allclose(sparse_ce, grpo.masked_cross_entropy(logits, ids, mask), atol=1e-6):
+        raise AssertionError("仅计算 mask 位置时 SFT loss 与完整 logits 不一致")
 
     return (f"退化组丢弃 · ratio=1/KL=0 对齐正确 · "
             f"token 级 {token_level.item():+.3f} ≠ 按序列 {per_seq.item():+.3f} · "
@@ -786,11 +857,14 @@ def check_lora_serve() -> str:
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             live.load("policy-step-000001", tmp)
+            live.load("policy-step-000002", tmp)
         # A swap must unload before loading, or a failed load leaves the old
         # adapter serving while the trainer believes the new one is live.
         named = [call for call in seen if call[1] == "policy-step-000001"]
-        if [c[0] for c in named] != ["unload_lora_adapter", "load_lora_adapter"]:
+        if [c[0] for c in named][:2] != ["unload_lora_adapter", "load_lora_adapter"]:
             raise AssertionError(f"换权重顺序不对（应先卸后装）：{[c[0] for c in named]}")
+        if [c[0] for c in named][-1] != "unload_lora_adapter":
+            raise AssertionError("下一轮发布没有卸载旧 LoRA")
     finally:
         httpd.shutdown()
 
@@ -983,18 +1057,27 @@ def check_logprob_placement() -> str:
     if any(v != 0.0 for j, v in enumerate(sample.logp_old) if j not in covered):
         raise AssertionError("span 之外出现了非零 logp_old")
 
-    # Partial or absent coverage must drop the whole vector, so the trainer
-    # falls back to a frozen pass rather than mixing real and fake ratios in
-    # one sequence.
-    trajectory.sampled = records[:1]
-    if packer.to_sample(trajectory, tools).logp_old != []:
-        raise AssertionError("只匹配部分 span 时应整体丢弃 logp_old")
-    trajectory.sampled = [{"prompt_token_ids": [1, 2, 3], "logp_old": [-0.5]}]
-    if packer.to_sample(trajectory, tools).logp_old != []:
-        raise AssertionError("完全不匹配时应丢弃 logp_old")
+    trajectory.sampled = [
+        {**record, "logp_old": record["logp_old"][:-1]}
+        for record in records
+    ]
+    short = packer.to_sample(trajectory, tools)
+    if any(short.mask[span.end - 1] for span in packed.segments):
+        raise AssertionError("采样器未返回 EOS logp 时，EOS 不能进入 GRPO 概率比")
+    if not any(short.mask):
+        raise AssertionError("缺少 EOS logp 不应丢掉其他有效生成 token")
 
-    return (f"{len(packed.segments)} 个 span 各自对位正确 · span 外全零 · "
-            f"部分覆盖与不匹配均整体丢弃")
+    # A live rollout with incomplete coverage must be dropped. Mixing real and
+    # recomputed probabilities in one sequence would corrupt the ratio.
+    trajectory.sampled = records[:1]
+    if packer.to_sample(trajectory, tools) is not None:
+        raise AssertionError("只匹配部分 span 时应丢弃整条训练样本")
+    trajectory.sampled = [{"prompt_token_ids": [1, 2, 3], "logp_old": [-0.5]}]
+    if packer.to_sample(trajectory, tools) is not None:
+        raise AssertionError("完全不匹配时应丢弃整条训练样本")
+
+    return (f"{len(packed.segments)} 个 span 各自对位正确 · 缺失 EOS logp 被 mask · "
+            f"部分覆盖与不匹配样本均被丢弃")
 
 
 async def check_engine_adapter_factory() -> str:
@@ -1118,9 +1201,11 @@ async def main() -> int:
     if tpl_ok:
         await stage("参数未双重编码", check_arguments_normalisation)
         await stage("前缀性质与 loss mask", check_loss_mask)
+        await stage("Qwen3 非思考模板", check_qwen3_no_think)
     else:
         record("参数未双重编码", SKIP, "模板不可用")
         record("前缀性质与 loss mask", SKIP, "模板不可用")
+        record("Qwen3 非思考模板", SKIP, "模板不可用")
 
     print("\n训练通路")
     await stage("训练期适配器", check_policy_adapter)
@@ -1131,6 +1216,7 @@ async def main() -> int:
     await stage("训练循环编排", check_training_loop)
     await stage("logp_old 对位", check_logprob_placement)
     await stage("引擎适配器工厂", check_engine_adapter_factory)
+    await stage("多卡 GPU 布局", check_multi_gpu_layout)
 
     try:
         import torch  # noqa: F401

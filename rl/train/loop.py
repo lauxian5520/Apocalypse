@@ -53,7 +53,7 @@ class LoopConfig:
     batch_size: int = 8
     concurrency: int = 16
     eval_every: int = 25
-    save_every: int = 25
+    save_every: int = 1
     seed: int = 0
     reward_threshold: float = 1.0       # what counts as "solved" for the curriculum
 
@@ -164,6 +164,8 @@ def run(
 
         batches = packer.build_batches(usable, batch_size=cfg.batch_size)
         train_started = time.monotonic()
+        trained_tokens = 0
+        updated = False
         for batch in batches:
             # Advantages are computed here, not in the hook: every group is
             # whole within one batch (`build_batches` guarantees it), so the
@@ -177,17 +179,19 @@ def run(
                 # apply a zero gradient and still pay for the forward pass.
                 continue
             stats = hooks.forward_backward(batch, advantages, keep)
+            updated = True
+            trained_tokens += sum(sum(s.mask[1:]) for s, k in zip(batch.samples, keep) if k)
             for key, value in (stats or {}).items():
                 if hasattr(row, key):
                     setattr(row, key, value)
         row.train_seconds = round(time.monotonic() - train_started, 2)
-        row.trainable_tokens = sum(sum(s.mask) for b in batches for s in b.samples)
+        row.trainable_tokens = trained_tokens
 
         state.log.append(row)
         for warning in state.log.warnings(row):
             logger.warning("[step %d] %s", step, warning)
 
-        if batches and (step + 1) % cfg.save_every == 0:
+        if updated and (step + 1) % cfg.save_every == 0:
             # Swapping is what keeps the next step on-policy. Without it the
             # run trains one thing and samples another, silently.
             state.adapter = hooks.publish(step + 1)

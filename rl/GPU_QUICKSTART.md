@@ -1,6 +1,6 @@
 # GPU 机上从 `git clone` 到开始训练
 
-这份文档假设你刚租到一张卡，什么都没装。全程大约 20 分钟，其中大部分是下载。
+这份文档从单卡起步；第 7 节给出同机多卡的 SFT、GRPO 和 rollout 推理命令。
 
 前置阅读不是必需的，但 [`course/18`](../course/18-rl-分词对齐与loss-mask.md) 解释了
 为什么第 4 步的冒烟测试不能跳过。
@@ -199,10 +199,41 @@ CUDA_VISIBLE_DEVICES=0 python -m rl.train.run_grpo --base Qwen/Qwen2.5-1.5B-Inst
 
 每个进程只看得见自己那张卡，在进程内都是 `cuda:0`，所以训练的 `--device` 保持默认即可。
 
-**多卡数据并行训练（DDP / `torchrun`）目前不支持**，而且它也不解决显存问题：数据并行是在
-每张卡上各放一份**完整**模型，省的是时间，不是单卡显存。真要降单卡显存得做分片（FSDP /
-ZeRO），对 1.5B 来说杀鸡用牛刀。vLLM 自己的 `--tensor-parallel-size` 同理，1.5B 的权重只有 3 GB，
-切开只会增加卡间通信。
+若模型本身放不进一张卡，使用下方的 FSDP2 分片训练。仅增加数据并行副本不会降低单卡模型显存。
+
+### 模型超过单卡显存：FSDP2 训练 + vLLM 张量并行
+
+训练和推理使用**互不重叠**的 GPU 集合。下面以同机 8×RTX 4090、Qwen3 8B 为例；卡号和数量可按
+服务器实际情况修改。Qwen3 使用仓库固定的非思考工具模板；Qwen2.5 继续使用原模板。
+准备数据时可用 `python -m rl.cli setup --model Qwen/Qwen3-8B` 预取对应 tokenizer。
+
+```bash
+# 终端 A：6、7 号卡提供 rollout 和 dev 评估，TP=2。
+python -m rl.train.launch_vllm --base Qwen/Qwen3-8B --gpus 6,7 --tp 2 \
+    --gpu-memory-utilization 0.85 --max-model-len 16384
+
+# 终端 B：SFT。每张训练卡一个进程；若先完成 SFT 再启动 vLLM，
+# 此处也可改用 0..7 八张卡、--nproc_per_node=8。
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 torchrun --standalone --nproc_per_node=6 \
+    -m rl.train.run_sft train --trajectories rl/data/sft/teacher.jsonl \
+    --base Qwen/Qwen3-8B --out rl/data/adapters/sft-qwen3
+
+# 终端 B：GRPO。训练进程会确认所声明的推理卡与训练卡不重叠。
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 torchrun --standalone --nproc_per_node=6 \
+    -m rl.train.run_grpo --base Qwen/Qwen3-8B \
+    --adapter rl/data/adapters/sft-qwen3 --rollout-gpus 6,7 --vllm-tp 2 \
+    --steps 500 -G 8 --questions-per-step 8
+```
+
+其他单机服务器只需修改 `CUDA_VISIBLE_DEVICES`、`--nproc_per_node`、`--gpus` 和 `--tp`。
+训练至少需要两张卡才会启用 FSDP2；单进程仍走原来的单卡路径。vLLM 的 GPU 数量须等于 `--tp`。
+本地模型目录名没有 `Qwen2.5` 或 `Qwen3` 时，在 SFT/GRPO 命令中明确添加
+`--template-family qwen2.5` 或 `--template-family qwen3`。工具调用格式只验证了这两代 Qwen。
+
+GRPO 会先把 `--adapter` 加载到训练进程和 vLLM，两侧从同一策略开始。每一轮有参数更新后，
+所有训练进程共同汇集 LoRA、由主进程写文件并热加载到 vLLM；下一轮采样才会开始。
+因此 `--save-every` 固定为 1。运行前先执行 `python -m rl.checks.rl_check --offline`，
+然后用同样的 GPU 分配执行 `run_grpo --smoke`，检查每卡峰值显存和 adapter 版本。
 
 ### 显存峰值在哪
 
@@ -213,10 +244,9 @@ ZeRO），对 1.5B 来说杀鸡用牛刀。vLLM 自己的 `--tensor-parallel-siz
 fp32 还要再翻倍。所以常规长度的轨迹在 24 GB 卡上与 vLLM 共存问题不大，接近上限的长轨迹才是
 风险。以冒烟测试时 `nvidia-smi` 的实测为准。
 
-真到了不够的时候，比加卡更划算的是**只在需要的位置算 log-prob**：计入 loss 的 token 只占约
-10%（其余是工具返回的检索结果，本来就被 mask 掉），现在却对全部位置都算了全词表的
-`log_softmax`。只对计入 loss 的位置取 hidden state 再过 `lm_head`，这部分峰值能降一个数量级。
-这个优化还没做——训练路径没在真 GPU 上跑过，先让冒烟测试告诉我们它是否必要。
+支持 `logits_to_keep` 的模型现在只对 loss mask 涉及的位置计算词表 logits；Qwen3 支持该接口。
+不支持它的模型回退到完整 logits。训练路径尚未在本仓库的机器上完成 GPU 实测，
+以目标机器的多卡冒烟测试和 `nvidia-smi` 峰值为准。
 
 ---
 

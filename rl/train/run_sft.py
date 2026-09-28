@@ -91,32 +91,44 @@ def collect(args) -> int:
 
 def train(args) -> int:
     """Filter by the verifier and fine-tune a LoRA adapter."""
-    from rl.train import preflight
+    from rl.train import preflight, distributed
 
     preflight.require_training()
-    print(f"设备：{preflight.describe_device(args.device)}")
+    distributed.validate_gpu_layout()
+    accelerator = distributed.create_accelerator()
+    main_rank = distributed.is_main(accelerator)
+    train_device = str(accelerator.device) if accelerator else args.device
+    device_info = preflight.describe_device(train_device)
+    if main_rank:
+        print(f"设备：{device_info}")
 
     from rl.rollout.trajectory import read_jsonl
     from rl.train import sft
     from rl.train.policy_model import ModelConfig, PolicyModel
+    from rl.env import template
+
+    template.configure(args.base, args.template_family)
 
     trajectories = read_jsonl(args.trajectories)
     kept, funnel = sft.select(trajectories, sft.SFTConfig(
         max_per_question=args.max_per_question, min_reward=args.min_reward))
-    print(sft.render_funnel(funnel))
+    if main_rank:
+        print(sft.render_funnel(funnel))
     if not kept:
-        print("\n没有可用的 SFT 数据。")
+        if main_rank:
+            print("\n没有可用的 SFT 数据。")
         return 1
 
     dataset = sft.build_dataset(kept)
     trainable = sum(sum(s.mask) for s in dataset)
-    print(f"\n分词后 {len(dataset)} 条 · 可训练 {trainable} token "
-          f"（占 {trainable / max(sum(len(s) for s in dataset), 1):.1%}）")
+    if main_rank:
+        print(f"\n分词后 {len(dataset)} 条 · 可训练 {trainable} token "
+              f"（占 {trainable / max(sum(len(s) for s in dataset), 1):.1%}）")
 
     model = PolicyModel(ModelConfig(
-        model_name=args.base, learning_rate=args.lr, device=args.device,
+        model_name=args.base, learning_rate=args.lr, device=train_device,
         micro_batch_size=args.micro_batch_size,
-    ))
+    ), accelerator=accelerator)
 
     import random
     rng = random.Random(args.seed)
@@ -128,14 +140,15 @@ def train(args) -> int:
             batch = order[start:start + args.batch_size]
             stats = model.sft_step(batch)
             step += 1
-            if step % args.log_every == 0:
+            if step % args.log_every == 0 and main_rank:
                 print(f"  epoch {epoch} step {step:4}  loss {stats['loss']:.4f}  "
                       f"grad {stats['grad_norm']:.3f}  tokens {stats['trainable_tokens']}")
 
     path = model.save_adapter(args.out)
-    print(f"\nadapter 写入 {path}")
-    print("下一步：把它作为 GRPO 的起点\n"
-          f"  vllm serve {args.base} --enable-lora --lora-modules sft={path}")
+    if main_rank:
+        print(f"\nadapter 写入 {path}")
+        print("下一步：把它作为 GRPO 的起点\n"
+              f"  vllm serve {args.base} --enable-lora --lora-modules sft={path}")
     return 0
 
 
@@ -162,6 +175,7 @@ def main() -> int:
     t = sub.add_parser("train", help="筛选并微调（需要 GPU）")
     t.add_argument("--trajectories", default=os.path.join(REPO_ROOT, "rl/data/sft/teacher.jsonl"))
     t.add_argument("--base", default="Qwen/Qwen2.5-1.5B-Instruct")
+    t.add_argument("--template-family", choices=("qwen2.5", "qwen3"), default=None)
     t.add_argument("--out", default=os.path.join(REPO_ROOT, "rl/data/adapters/sft"))
     t.add_argument("--epochs", type=int, default=2)
     t.add_argument("--batch-size", type=int, default=4)

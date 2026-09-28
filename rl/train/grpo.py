@@ -214,3 +214,60 @@ def entropy(logits: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     logp = F.log_softmax(logits, dim=-1)
     token_entropy = -(logp.exp() * logp).sum(dim=-1)
     return (token_entropy * mask).sum() / mask.sum().clamp(min=1.0)
+
+
+def selected_positions(mask: torch.Tensor) -> torch.Tensor:
+    """Logit positions predicting at least one trainable token in a batch."""
+    return torch.where(mask[:, 1:].bool().any(dim=0))[0]
+
+
+def selected_logprobs(logits: torch.Tensor, input_ids: torch.Tensor,
+                      positions: torch.Tensor) -> torch.Tensor:
+    """Log-probs at selected logit positions, aligned to target tokens."""
+    targets = input_ids[:, positions + 1]
+    return F.log_softmax(logits.float(), dim=-1).gather(
+        -1, targets.unsqueeze(-1)).squeeze(-1)
+
+
+def selected_entropy(logits: torch.Tensor, selected_mask: torch.Tensor) -> torch.Tensor:
+    logp = F.log_softmax(logits.float(), dim=-1)
+    values = -(logp.exp() * logp).sum(dim=-1)
+    weights = selected_mask.float()
+    return (values * weights).sum() / weights.sum().clamp(min=1)
+
+
+def selected_token_loss(logits: torch.Tensor, input_ids: torch.Tensor,
+                        mask: torch.Tensor, positions: torch.Tensor,
+                        advantages: torch.Tensor, logp_old: torch.Tensor,
+                        ref_logp: torch.Tensor | None = None,
+                        config: GRPOConfig | None = None) -> tuple[torch.Tensor, dict]:
+    """The GRPO objective over only masked positions' vocabulary logits."""
+    cfg = config or GRPOConfig()
+    weights = mask[:, positions + 1].float()
+    logp = selected_logprobs(logits, input_ids, positions)
+    old = logp_old[:, positions + 1]
+    ratio = torch.exp(logp - old)
+    adv = advantages[:, None]
+    policy = -torch.min(ratio * adv, ratio.clamp(1 - cfg.clip_eps, 1 + cfg.clip_eps) * adv)
+    count = weights.sum().clamp(min=1)
+    loss = (policy * weights).sum() / count
+    stats = {
+        "policy_loss": loss.detach(), "trainable_tokens": count.detach(),
+        "clip_fraction": (((ratio < 1 - cfg.clip_eps) | (ratio > 1 + cfg.clip_eps)).float()
+                          * weights).sum().detach() / count,
+        "mean_ratio": (ratio * weights).sum().detach() / count,
+    }
+    if ref_logp is not None:
+        diff = ref_logp - logp
+        kl = ((diff.exp() - diff - 1) * weights).sum() / count
+        loss = loss + cfg.kl_coef * kl
+        stats["kl"] = kl.detach()
+    stats["loss"] = loss.detach()
+    return loss, stats
+
+
+def selected_cross_entropy(logits: torch.Tensor, input_ids: torch.Tensor,
+                           mask: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+    weights = mask[:, positions + 1].float()
+    logp = selected_logprobs(logits, input_ids, positions)
+    return -(logp * weights).sum() / weights.sum().clamp(min=1)

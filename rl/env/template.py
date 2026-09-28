@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOKENIZER_DIR = os.path.join(HERE, "qwen25")
 TEMPLATE_FILE = os.path.join(HERE, "qwen2.5_tool.jinja")
+QWEN3_TEMPLATE_FILE = os.path.join(HERE, "qwen3_tool_no_think.jinja")
 
 # The tokenizer binaries are ~11 MB and re-downloadable, so they are not in git
 # (see rl/.gitignore). The *template* is, because HF updates templates in place
@@ -55,23 +56,39 @@ TEMPLATE_FILE = os.path.join(HERE, "qwen2.5_tool.jinja")
 # the Hub — `python -m rl.cli setup` pre-fetches it so a training run does not
 # discover the network is unavailable at step 1.
 TOKENIZER_HUB_ID = "Qwen/Qwen2.5-1.5B-Instruct"
+_active_model = TOKENIZER_HUB_ID
+_active_family = "qwen2.5"
 
 END_OF_TURN = "<|im_end|>"
 
 
-@lru_cache(maxsize=1)
-def template_text() -> str:
-    with open(TEMPLATE_FILE, "r", encoding="utf-8") as f:
+def configure(model: str, family: str | None = None) -> None:
+    """Select the tokenizer and pinned tool template for one training process."""
+    global _active_model, _active_family
+    family = family or ("qwen3" if "qwen3" in model.lower() else
+                        "qwen2.5" if "qwen2.5" in model.lower() else "")
+    if family not in ("qwen2.5", "qwen3"):
+        raise ValueError("仅支持 Qwen2.5/Qwen3；本地模型请指定 --template-family")
+    _active_model, _active_family = model, family
+
+
+@lru_cache(maxsize=2)
+def _template_text(family: str) -> str:
+    path = QWEN3_TEMPLATE_FILE if family == "qwen3" else TEMPLATE_FILE
+    with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
 
-@lru_cache(maxsize=1)
+def template_text() -> str:
+    return _template_text(_active_family)
+
+
 def template_sha256() -> str:
     return hashlib.sha256(template_text().encode("utf-8")).hexdigest()
 
 
-@lru_cache(maxsize=2)
-def tokenizer(path: str = TOKENIZER_DIR):
+@lru_cache(maxsize=4)
+def _tokenizer(source: str, family: str):
     """The tokenizer, from the local copy when present or the Hub otherwise.
 
     Either source gives the same vocabulary; what must not vary is the chat
@@ -80,13 +97,19 @@ def tokenizer(path: str = TOKENIZER_DIR):
     """
     from transformers import AutoTokenizer
 
-    source = path if os.path.isfile(os.path.join(path, "tokenizer.json")) else TOKENIZER_HUB_ID
-    if source != path:
-        logger.info("[template] tokenizer not in %s, falling back to %s", path, source)
     tok = AutoTokenizer.from_pretrained(source)
     # Use the pinned template, never whatever shipped with the tokenizer.
-    tok.chat_template = template_text()
+    tok.chat_template = _template_text(family)
     return tok
+
+
+def tokenizer():
+    # The repository's historical Qwen2.5 cache is shared by its size variants.
+    # Qwen3 resolves the selected model itself through the HF cache, so a local
+    # Qwen2.5 tokenizer cannot accidentally be reused for it.
+    local = TOKENIZER_DIR if _active_family == "qwen2.5" else ""
+    source = local if local and os.path.isfile(os.path.join(local, "tokenizer.json")) else _active_model
+    return _tokenizer(source, _active_family)
 
 
 def normalize(messages: list[dict]) -> list[dict]:
@@ -203,8 +226,9 @@ def pack(log: list[SessionEvent], tools: list[dict] | None = None,
     sequence; intermediate tool-block prefixes are not.
 
     A template that re-renders *earlier assistant turns* once a later one exists
-    — Qwen3 does this, stripping `<think>` blocks from all but the last — would
-    break the real property, and the assertions below would catch it.
+    — the upstream Qwen3 template can do this by stripping earlier `<think>`
+    blocks. Our pinned non-thinking Qwen3 template keeps the empty prefix on
+    every assistant turn so the assertion remains true.
     """
     messages = derive_messages(log, system_prompt)
     eos_id = tokenizer().convert_tokens_to_ids(END_OF_TURN)

@@ -36,4 +36,5 @@
 torch>=2.9
 vllm>=0.27
 peft>=0.15
-accelerate>=1.6
+# 1.15 fixes FSDP2 + PEFT adapter export losing nonzero-rank shards.
+accelerate>=1.15

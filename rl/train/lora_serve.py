@@ -58,6 +58,7 @@ class VLLMServer:
             base = base[: -len("/v1")]
         self.root = base
         self.v1 = f"{base}/v1"
+        self._loaded_name = ""
 
     # ── URLs, kept in one place so a path change is a one-line edit ──
     @property
@@ -118,6 +119,11 @@ class VLLMServer:
         if not os.path.isdir(path):
             raise FileNotFoundError(f"LoRA 目录不存在：{path}")
 
+        # Keep only the newest adapter resident when max_loras/max_cpu_loras is
+        # one. The previous step has already finished serving its rollouts.
+        if self._loaded_name and self._loaded_name != name:
+            self.unload(self._loaded_name, missing_ok=True)
+
         # Unloading first is what makes a swap idempotent: loading a name the
         # server already knows is an error on some builds, and a half-completed
         # swap that left the old adapter in place would train against one
@@ -133,6 +139,7 @@ class VLLMServer:
                         json={"lora_name": name, "lora_path": path},
                     )
                 if response.status_code < 300:
+                    self._loaded_name = name
                     logger.info("[lora] loaded %s from %s", name, path)
                     return
                 last = RuntimeError(f"HTTP {response.status_code}: {response.text[:200]}")
@@ -151,6 +158,8 @@ class VLLMServer:
             raise RuntimeError(f"卸载 LoRA {name} 失败：{e}") from e
         if response.status_code >= 300 and not missing_ok:
             raise RuntimeError(f"卸载 LoRA {name} 失败：HTTP {response.status_code}")
+        if self._loaded_name == name:
+            self._loaded_name = ""
 
 
 def adapter_name(step: int) -> str:

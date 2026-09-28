@@ -210,7 +210,7 @@ class PolicyAdapter:
         is far better to find out here — with the request still in hand — than
         in a loss curve three days later.
         """
-        if step.logp_old and len(step.logp_old) != len(step.completion_token_ids):
+        if step.completion_token_ids and len(step.logp_old) != len(step.completion_token_ids):
             raise RuntimeError(
                 f"logprobs 数量 {len(step.logp_old)} 与 completion token 数 "
                 f"{len(step.completion_token_ids)} 不一致——无法对齐 logp_old"

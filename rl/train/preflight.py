@@ -17,6 +17,7 @@ TRAINING_DEPS = (
     ("torch", "torch", "forward/backward"),
     ("transformers", "transformers", "模型与分词器"),
     ("peft", "peft", "LoRA"),
+    ("accelerate", "accelerate", "多卡 FSDP2"),
 )
 
 ROLLOUT_DEPS = (

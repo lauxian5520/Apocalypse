@@ -22,6 +22,7 @@ weighted losses and divides once, at the end.
 """
 import logging
 import os
+import inspect
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -86,34 +87,47 @@ class StepStats:
 class PolicyModel:
     """A LoRA-wrapped causal LM with GRPO and SFT steps."""
 
-    def __init__(self, config: ModelConfig | None = None, tokenizer=None):
+    def __init__(self, config: ModelConfig | None = None, tokenizer=None,
+                 accelerator=None, adapter: str = ""):
         import torch
-        from peft import LoraConfig, get_peft_model
+        from peft import LoraConfig, PeftModel, get_peft_model
         from transformers import AutoModelForCausalLM
 
         self.config = cfg = config or ModelConfig()
         self.torch = torch
+        self.accelerator = accelerator
+        self.device = str(accelerator.device) if accelerator else cfg.device
 
         dtype = getattr(torch, cfg.dtype)
         logger.info("[policy] loading %s (%s)", cfg.model_name, cfg.dtype)
         base = AutoModelForCausalLM.from_pretrained(
             cfg.model_name, dtype=dtype, device_map=None,
         )
+        self.sparse_logits = "logits_to_keep" in inspect.signature(base.forward).parameters
+        if accelerator is not None:
+            blocks = getattr(base, "_no_split_modules", None)
+            if not blocks:
+                raise RuntimeError("模型没有声明可分片的 Transformer 层，不能安全启用 FSDP2")
+            accelerator.state.fsdp_plugin.transformer_cls_names_to_wrap = list(blocks)
         base.config.use_cache = False          # incompatible with checkpointing
         if cfg.gradient_checkpointing:
             base.gradient_checkpointing_enable()
             base.enable_input_require_grads()
 
-        self.model = get_peft_model(base, LoraConfig(
+        lora_config = LoraConfig(
             r=cfg.lora_r,
             lora_alpha=cfg.lora_alpha,
             lora_dropout=cfg.lora_dropout,
             target_modules=list(cfg.target_modules),
             task_type="CAUSAL_LM",
             bias="none",
-        ))
-        self.model.to(cfg.device)
-        self.model.print_trainable_parameters()
+        )
+        self.model = (PeftModel.from_pretrained(base, adapter, is_trainable=True)
+                      if adapter else get_peft_model(base, lora_config))
+        if accelerator is None:
+            self.model.to(cfg.device)
+        if accelerator is None or accelerator.is_main_process:
+            self.model.print_trainable_parameters()
 
         self.tokenizer = tokenizer
         if self.tokenizer is None:
@@ -129,12 +143,17 @@ class PolicyModel:
             [p for p in self.model.parameters() if p.requires_grad],
             lr=cfg.learning_rate, weight_decay=cfg.weight_decay,
         )
+        if accelerator is not None:
+            self.model, self.optimizer = accelerator.prepare(self.model, self.optimizer)
 
     # ── forward helpers ───────────────────────────────────────────
-    def _logits(self, input_ids, attention_mask):
-        return self.model(input_ids=input_ids, attention_mask=attention_mask).logits
+    def _logits(self, input_ids, attention_mask, positions=None):
+        kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        if positions is not None and self.sparse_logits:
+            kwargs["logits_to_keep"] = positions
+        return self.model(**kwargs).logits
 
-    def _reference_logprobs(self, input_ids, attention_mask):
+    def _reference_logprobs(self, input_ids, attention_mask, positions=None):
         """Token-aligned log-probs from the base model, adapter disabled.
 
         No second copy of the weights: LoRA leaves the base intact, so turning
@@ -143,11 +162,14 @@ class PolicyModel:
         """
         from rl.train import grpo
 
-        with self.torch.no_grad(), self.model.disable_adapter():
-            logits = self._logits(input_ids, attention_mask)
+        raw = (self.accelerator.unwrap_model(self.model) if self.accelerator else self.model)
+        with self.torch.no_grad(), raw.disable_adapter():
+            logits = self._logits(input_ids, attention_mask, positions)
+            if positions is not None and self.sparse_logits:
+                return grpo.selected_logprobs(logits, input_ids, positions)
             return grpo.token_logprobs(logits, input_ids)
 
-    def _sampler_logprobs(self, input_ids, attention_mask, recorded):
+    def _sampler_logprobs(self, input_ids, attention_mask, recorded, positions=None):
         """`logp_old`: the recorded values when available, else a frozen pass.
 
         Recorded values come from the rollout and are the correct thing — see
@@ -160,7 +182,13 @@ class PolicyModel:
             return recorded
         with self.torch.no_grad():
             from rl.train import grpo
-            return grpo.token_logprobs(self._logits(input_ids, attention_mask), input_ids)
+            logits = self._logits(input_ids, attention_mask, positions)
+            if positions is not None and self.sparse_logits:
+                values = grpo.selected_logprobs(logits, input_ids, positions)
+                out = self.torch.zeros_like(input_ids, dtype=values.dtype)
+                out[:, positions + 1] = values
+                return out
+            return grpo.token_logprobs(logits, input_ids)
 
     # ── the GRPO step ─────────────────────────────────────────────
     def grpo_step(self, batch, advantages: list[float], keep: list[bool],
@@ -193,32 +221,43 @@ class PolicyModel:
             ids, mask, logp_recorded = self._to_tensors(chunk)
             attention = (ids != self.pad_token_id).long()
             adv = torch.tensor(chunk_adv, dtype=torch.float, device=ids.device)
+            positions = grpo.selected_positions(mask) if self.sparse_logits else None
 
-            logp_old = self._sampler_logprobs(ids, attention, logp_recorded)
-            ref_logp = self._reference_logprobs(ids, attention) if cfg.kl_coef else None
+            logp_old = self._sampler_logprobs(ids, attention, logp_recorded, positions)
+            ref_logp = self._reference_logprobs(ids, attention, positions) if cfg.kl_coef else None
 
-            logits = self._logits(ids, attention)
-            loss, micro = grpo.masked_token_loss(
-                logits, ids, mask, adv, logp_old, ref_logp, cfg)
+            logits = self._logits(ids, attention, positions)
+            if positions is not None:
+                loss, micro = grpo.selected_token_loss(
+                    logits, ids, mask, positions, adv, logp_old, ref_logp, cfg)
+            else:
+                loss, micro = grpo.masked_token_loss(
+                    logits, ids, mask, adv, logp_old, ref_logp, cfg)
 
             # Re-weight: `masked_token_loss` divided by *this* micro-batch's
             # tokens, but the step's denominator is every token in the step.
             micro_tokens = float(mask[:, 1:].sum().item()) or 1.0
-            (loss * (micro_tokens / total_tokens)).backward()
+            weighted_loss = loss * (micro_tokens / total_tokens)
+            if self.accelerator:
+                self.accelerator.backward(weighted_loss)
+            else:
+                weighted_loss.backward()
 
             share = micro_tokens / total_tokens
             accumulated["loss"] += float(micro["loss"]) * share
             accumulated["kl"] += float(micro.get("kl", 0.0)) * share
             accumulated["clip"] += float(micro["clip_fraction"]) * share
             accumulated["ratio"] += float(micro["mean_ratio"]) * share
-            accumulated["entropy"] += float(grpo.entropy(logits.detach(), mask)) * share
+            entropy = (grpo.selected_entropy(logits.detach(), mask[:, positions + 1])
+                       if positions is not None else grpo.entropy(logits.detach(), mask))
+            accumulated["entropy"] += float(entropy) * share
 
             del logits, loss
 
-        grad_norm = torch.nn.utils.clip_grad_norm_(
-            [p for p in self.model.parameters() if p.requires_grad],
-            self.config.max_grad_norm,
-        )
+        trainable = [p for p in self.model.parameters() if p.requires_grad]
+        grad_norm = (self.accelerator.clip_grad_norm_(trainable, self.config.max_grad_norm)
+                     if self.accelerator else
+                     torch.nn.utils.clip_grad_norm_(trainable, self.config.max_grad_norm))
         self.optimizer.step()
 
         stats.loss = accumulated["loss"]
@@ -251,18 +290,24 @@ class PolicyModel:
             chunk = samples[start:start + step]
             ids, mask, _ = self._to_tensors(chunk)
             attention = (ids != self.pad_token_id).long()
-            logits = self._logits(ids, attention)
-            loss = grpo.masked_cross_entropy(logits, ids, mask)
+            positions = grpo.selected_positions(mask) if self.sparse_logits else None
+            logits = self._logits(ids, attention, positions)
+            loss = (grpo.selected_cross_entropy(logits, ids, mask, positions)
+                    if positions is not None else grpo.masked_cross_entropy(logits, ids, mask))
 
             micro_tokens = float(mask[:, 1:].sum().item()) or 1.0
-            (loss * (micro_tokens / total_tokens)).backward()
+            weighted_loss = loss * (micro_tokens / total_tokens)
+            if self.accelerator:
+                self.accelerator.backward(weighted_loss)
+            else:
+                weighted_loss.backward()
             accumulated += float(loss) * (micro_tokens / total_tokens)
             del logits, loss
 
-        grad_norm = torch.nn.utils.clip_grad_norm_(
-            [p for p in self.model.parameters() if p.requires_grad],
-            self.config.max_grad_norm,
-        )
+        trainable = [p for p in self.model.parameters() if p.requires_grad]
+        grad_norm = (self.accelerator.clip_grad_norm_(trainable, self.config.max_grad_norm)
+                     if self.accelerator else
+                     torch.nn.utils.clip_grad_norm_(trainable, self.config.max_grad_norm))
         self.optimizer.step()
 
         stats.loss = accumulated
@@ -284,7 +329,7 @@ class PolicyModel:
             recorded = sample.logp_old or [0.0] * len(sample)
             logps.append(recorded + [0.0] * (width - len(recorded)))
 
-        device = self.config.device
+        device = self.device
         return (
             torch.tensor(ids, dtype=torch.long, device=device),
             torch.tensor(masks, dtype=torch.long, device=device),
@@ -292,8 +337,33 @@ class PolicyModel:
         )
 
     def save_adapter(self, path: str) -> str:
-        os.makedirs(path, exist_ok=True)
-        self.model.save_pretrained(path)
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(path)
+        if self.accelerator is None:
+            os.makedirs(path, exist_ok=True)
+            self.model.save_pretrained(path)
+            if self.tokenizer is not None:
+                self.tokenizer.save_pretrained(path)
+            return path
+
+        # Only LoRA tensors are gathered. Gathering a FULL_STATE_DICT of an 8B
+        # base at every rollout boundary would defeat the memory saving.
+        raw = self.accelerator.unwrap_model(self.model)
+        adapter_state = {}
+        with self.torch.no_grad():
+            for name, param in raw.named_parameters():
+                if "lora_" not in name:
+                    continue
+                full = param.full_tensor() if hasattr(param, "full_tensor") else param
+                if self.accelerator.is_main_process:
+                    adapter_state[name] = full.detach().cpu().contiguous()
+        def write_adapter():
+            if not adapter_state:
+                raise RuntimeError("FSDP2 未汇集到 LoRA 参数，拒绝发布空 adapter")
+            os.makedirs(path, exist_ok=True)
+            raw.save_pretrained(path, state_dict=adapter_state)
+            if self.tokenizer is not None:
+                self.tokenizer.save_pretrained(path)
+
+        from rl.train.distributed import from_main
+        from_main(self.accelerator, write_adapter)
+        self.accelerator.wait_for_everyone()
         return path

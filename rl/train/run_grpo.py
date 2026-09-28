@@ -41,12 +41,14 @@ logger = logging.getLogger(__name__)
 class Hooks:
     """`loop.TrainHooks` over a real model and a real vLLM server."""
 
-    def __init__(self, model, server, adapter_root, eval_fn, grpo_config=None):
+    def __init__(self, model, server, adapter_root, eval_fn, grpo_config=None,
+                 accelerator=None):
         self.model = model
         self.server = server
         self.adapter_root = adapter_root
         self.eval_fn = eval_fn
         self.grpo_config = grpo_config
+        self.accelerator = accelerator
 
     def forward_backward(self, batch, advantages, keep) -> dict:
         return self.model.grpo_step(batch, advantages, keep, self.grpo_config)
@@ -57,14 +59,17 @@ class Hooks:
         path = adapter_dir(self.adapter_root, step)
         self.model.save_adapter(path)
         name = adapter_name(step)
-        self.server.load(name, path)
+        from rl.train.distributed import from_main
+        from_main(self.accelerator, lambda: self.server.load(name, path))
         return name
 
     def evaluate(self, step: int) -> dict:
-        return self.eval_fn(step)
+        from rl.train.distributed import from_main
+        return from_main(self.accelerator, lambda: self.eval_fn(step))
 
 
-def build_rollout(tasks_by_id, policy_factory, stamp, concurrency: int):
+def build_rollout(tasks_by_id, policy_factory, stamp, concurrency: int,
+                  accelerator=None):
     """A `rollout(chosen, G)` closure over the harness loop."""
     from rl.rollout import engine
 
@@ -72,11 +77,16 @@ def build_rollout(tasks_by_id, policy_factory, stamp, concurrency: int):
         # A factory, not an instance: the engine builds one adapter per episode
         # so each trajectory owns its own generation records, which is what
         # makes `logp_old` attributable. See `engine.run_episode`.
-        trajectories, _ = asyncio.run(engine.run_many(
-            chosen, policy_factory, stamp, concurrency=concurrency,
-            group_size=group_size, schedule="refill", progress_every=0,
-        ))
-        return trajectories
+        from rl.train.distributed import from_main
+
+        def collect():
+            trajectories, _ = asyncio.run(engine.run_many(
+                chosen, policy_factory, stamp, concurrency=concurrency,
+                group_size=group_size, schedule="refill", progress_every=0,
+            ))
+            return trajectories
+
+        return from_main(accelerator, collect)
 
     return rollout
 
@@ -119,8 +129,12 @@ def main() -> int:
 
     p = argparse.ArgumentParser(description="GRPO 训练")
     p.add_argument("--base", default="Qwen/Qwen2.5-1.5B-Instruct")
+    p.add_argument("--template-family", choices=("qwen2.5", "qwen3"), default=None,
+                   help="本地模型路径不含 Qwen 版本时指定")
     p.add_argument("--adapter", default="", help="起始 LoRA（通常是 SFT 的产物）")
     p.add_argument("--vllm", default="http://127.0.0.1:8000")
+    p.add_argument("--rollout-gpus", default="", help="本机 vLLM 使用的物理 GPU ID 列表")
+    p.add_argument("--vllm-tp", type=int, default=0, help="vLLM tensor parallel 数，用于启动前校验")
     p.add_argument("--steps", type=int, default=500)
     p.add_argument("--questions-per-step", type=int, default=8)
     p.add_argument("-G", "--group-size", type=int, default=8)
@@ -134,7 +148,7 @@ def main() -> int:
     p.add_argument("--device", default="cuda")
     p.add_argument("--eval-every", type=int, default=25)
     p.add_argument("--eval-n", type=int, default=100)
-    p.add_argument("--save-every", type=int, default=25)
+    p.add_argument("--save-every", type=int, default=1)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--split", default="train")
     p.add_argument("--splits-dir", default=os.path.join(REPO_ROOT, "rl/data/splits"))
@@ -143,6 +157,8 @@ def main() -> int:
     p.add_argument("--smoke", action="store_true",
                    help="2 题 · G=2 · 1 步 · 每步都换权重与评测，用来验证全链路")
     args = p.parse_args()
+    if args.save_every != 1:
+        p.error("agentic GRPO 每轮采样前必须发布最新策略；--save-every 只能是 1")
 
     if args.smoke:
         args.steps, args.questions_per_step, args.group_size = 1, 2, 2
@@ -154,8 +170,12 @@ def main() -> int:
     # inside a module the user never mentioned, and must not pre-empt the vLLM
     # check for someone whose real problem is the server.
     from rl.train import preflight
+    from rl.train import distributed
 
     preflight.require_training()
+    distributed.validate_gpu_layout(args.rollout_gpus, args.vllm_tp)
+    accelerator = distributed.create_accelerator()
+    main_rank = distributed.is_main(accelerator)
 
     from harness.corpus.store import load_cached
     from harness.tools.registry import ToolRegistry
@@ -169,16 +189,27 @@ def main() -> int:
     from rl.train.lora_serve import VLLMServer
     from rl.train.policy_model import ModelConfig, PolicyModel
 
-    print(f"设备：{preflight.describe_device(args.device)}")
+    template.configure(args.base, args.template_family)
+
+    train_device = str(accelerator.device) if accelerator else args.device
+    device_info = preflight.describe_device(train_device)
+    if main_rank:
+        print(f"设备：{device_info}")
     hint = preflight.warn_if_no_nvidia_smi()
-    if hint:
+    if hint and main_rank:
         print(f"  ⚠ {hint}")
 
     # Fail before loading a model if the server cannot accept weight swaps.
     server = VLLMServer(args.vllm)
-    served = server.wait_ready()
-    server.check_runtime_lora()
-    print(f"vLLM 就绪：{served}")
+    def check_server():
+        served = server.wait_ready()
+        server.check_runtime_lora()
+        if args.base not in served:
+            raise RuntimeError(f"vLLM 提供的模型 {served} 与 --base {args.base} 不一致")
+        return served
+    served = distributed.from_main(accelerator, check_server)
+    if main_rank:
+        print(f"vLLM 就绪：{served}")
 
     store = load_cached(corpus_dir(), False)
     registry = ToolRegistry(PRESET)
@@ -193,7 +224,8 @@ def main() -> int:
     tasks = split_mod.load(args.splits_dir, args.split)
     if args.smoke:
         tasks = tasks[: args.questions_per_step]
-    print(f"训练集 {len(tasks)} 题 · 语料 {len(store)} 段 @ {stamp.corpus_sha256[:12]}…")
+    if main_rank:
+        print(f"训练集 {len(tasks)} 题 · 语料 {len(store)} 段 @ {stamp.corpus_sha256[:12]}…")
 
     served_name = {"name": args.base}
 
@@ -204,12 +236,15 @@ def main() -> int:
         )
 
     model = PolicyModel(ModelConfig(
-        model_name=args.base, learning_rate=args.lr, device=args.device,
+        model_name=args.base, learning_rate=args.lr, device=train_device,
         micro_batch_size=args.micro_batch_size,
-    ))
+    ), accelerator=accelerator, adapter=args.adapter)
     if args.adapter:
-        model.model.load_adapter(args.adapter, adapter_name="default", is_trainable=True)
-        print(f"从 {args.adapter} 继续")
+        initial_name = "policy-step-000000"
+        distributed.from_main(accelerator, lambda: server.load(initial_name, args.adapter))
+        served_name["name"] = initial_name
+        if main_rank:
+            print(f"从 {args.adapter} 继续，vLLM 已加载相同的初始 LoRA")
 
     evaluate = make_evaluator(args, stamp, policy_factory)
 
@@ -223,27 +258,30 @@ def main() -> int:
     hooks = TrackingHooks(
         model, server, args.adapter_root, evaluate,
         grpo.GRPOConfig(clip_eps=args.clip_eps, kl_coef=args.kl_coef),
+        accelerator=accelerator,
     )
 
     state = run(
         tasks, hooks,
-        build_rollout({t["task_id"]: t for t in tasks}, policy_factory, stamp, args.concurrency),
+        build_rollout({t["task_id"]: t for t in tasks}, policy_factory, stamp,
+                      args.concurrency, accelerator),
         LoopConfig(
             steps=args.steps, questions_per_step=args.questions_per_step,
             group_size=args.group_size, batch_size=args.batch_size,
             concurrency=args.concurrency, eval_every=args.eval_every,
             save_every=args.save_every, seed=args.seed,
         ),
-        metrics_path=args.metrics,
+        metrics_path=args.metrics if main_rank else "",
     )
 
-    print()
-    print(state.log.render(last=20))
-    print()
-    print(f"课程池：{state.pool.summary()}")
-    if state.eval_history:
-        print(f"dev 轨迹：{state.eval_history}")
-    print(f"指标写入 {args.metrics}")
+    if main_rank:
+        print()
+        print(state.log.render(last=20))
+        print()
+        print(f"课程池：{state.pool.summary()}")
+        if state.eval_history:
+            print(f"dev 轨迹：{state.eval_history}")
+        print(f"指标写入 {args.metrics}")
     return 0
 
 

@@ -504,6 +504,7 @@ def _cmd_setup(args: argparse.Namespace) -> int:
         print("预取 tokenizer（避免训练时才发现拿不到）…")
         from rl.env import template
 
+        template.configure(args.model, args.template_family)
         tok = template.tokenizer()
         print(f"✓ tokenizer 就绪：{tok.__class__.__name__} · "
               f"模板 sha256 {template.template_sha256()[:16]}…")
@@ -620,6 +621,9 @@ def main() -> int:
     st.add_argument("--force", action="store_true", help="已存在也重建")
     st.add_argument("--no-tokenizer", dest="tokenizer", action="store_false",
                     help="跳过 tokenizer 预取（离线环境用）")
+    st.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct",
+                    help="预取这个训练基座的 tokenizer")
+    st.add_argument("--template-family", choices=("qwen2.5", "qwen3"), default=None)
     st.add_argument("--corpus-dir", default=DEFAULT_CORPUS_DIR)
     st.set_defaults(func=_cmd_setup)
 

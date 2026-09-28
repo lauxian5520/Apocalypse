@@ -117,12 +117,26 @@ def to_sample(trajectory: "Trajectory", tools: list[dict] | None = None) -> Samp
     if len(packed.token_ids) > MAX_SEQUENCE_TOKENS:
         return None
 
+    old = _place_logprobs(packed, trajectory.sampled)
+    if trajectory.sampled and not old:
+        # A live rollout with incomplete prompt/log-prob alignment is not a
+        # valid on-policy sample. Do not turn it into a ratio=1 fallback.
+        return None
+    mask = list(packed.mask)
+    if old:
+        # vLLM may omit the stop token's log-probability. A zero placeholder
+        # must never enter the GRPO ratio as if it were a sampled log-prob.
+        # SFT trajectories have no recorded log-probs and still train EOS.
+        mask = [active if (not active or old[i] != 0.0) else 0
+                for i, active in enumerate(mask)]
+    if not any(mask[1:]):
+        return None
     return Sample(
         task_id=trajectory.task_id,
         token_ids=packed.token_ids,
-        mask=packed.mask,
+        mask=mask,
         reward=float(trajectory.reward.get("total") or 0.0),
-        logp_old=_place_logprobs(packed, trajectory.sampled),
+        logp_old=old,
     )
 
 
