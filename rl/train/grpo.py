@@ -241,7 +241,11 @@ def selected_token_loss(logits: torch.Tensor, input_ids: torch.Tensor,
                         advantages: torch.Tensor, logp_old: torch.Tensor,
                         ref_logp: torch.Tensor | None = None,
                         config: GRPOConfig | None = None) -> tuple[torch.Tensor, dict]:
-    """The GRPO objective over only masked positions' vocabulary logits."""
+    """The GRPO objective over only masked positions' vocabulary logits.
+
+    ``ref_logp`` is already gathered at ``positions`` by the reference model;
+    ``logp_old`` remains token-aligned to the full input sequence.
+    """
     cfg = config or GRPOConfig()
     weights = mask[:, positions + 1].float()
     logp = selected_logprobs(logits, input_ids, positions)

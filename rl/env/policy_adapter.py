@@ -163,7 +163,8 @@ class PolicyAdapter:
             "temperature": self.temperature,
             "top_p": self.top_p,
             "logprobs": 0,                  # echo each sampled token's log-prob
-            "skip_special_tokens": False,   # <|im_end|> must survive into the text
+            "return_token_ids": True,       # vLLM returns these on the choice, not in logprobs
+            "skip_special_tokens": False,
         }
         if self.seed is not None:
             payload["seed"] = self.seed
@@ -219,7 +220,11 @@ class PolicyAdapter:
             return
         decoded = template.tokenizer().decode(
             step.completion_token_ids, skip_special_tokens=False)
-        if decoded != step.text:
+        # vLLM includes a sampled EOS in token_ids/logprobs but removes that
+        # terminal token from choice.text. Keep its logprob for the loss mask.
+        terminal_eos = (step.completion_token_ids[-1]
+                        == template.tokenizer().convert_tokens_to_ids(template.END_OF_TURN))
+        if decoded != step.text and not (terminal_eos and decoded == step.text + template.END_OF_TURN):
             raise RuntimeError(
                 "记录的 token id 解码结果与服务端返回的文本不一致——"
                 f"分词器或模板与服务端不同。\n  解码: {decoded[:160]!r}\n  返回: {step.text[:160]!r}"
@@ -232,6 +237,9 @@ class PolicyAdapter:
 
 
 def _completion_ids(choice: dict) -> list[int]:
+    ids = choice.get("token_ids")
+    if ids is not None:
+        return [int(i) for i in ids]
     logprobs = choice.get("logprobs") or {}
     ids = logprobs.get("token_ids")
     if ids:

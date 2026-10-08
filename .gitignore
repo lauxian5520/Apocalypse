@@ -3,6 +3,7 @@
 # WERE tracked. Run this once to stop tracking them:
 #     git rm -r --cached backend/data backend/uploads data
 var/
+enviroment/
 
 # Secrets
 .env

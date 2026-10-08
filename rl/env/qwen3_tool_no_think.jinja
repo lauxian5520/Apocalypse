@@ -1,6 +1,6 @@
-{# Pinned Qwen3 tool format. The empty think block is part of every assistant
-   prompt AND every rendered assistant turn, so earlier turns never change when
-   another tool turn is appended. This is required by template.pack(). #}
+{# Pinned Qwen3 tool format. The assistant prompt stops at the special
+   </think> token: trailing newlines can merge with a teacher turn that begins
+   with newlines, making the tokenised prompt cease to be a prefix. #}
 {%- if tools %}
     {{- '<|im_start|>system\n' }}
     {%- if messages[0].role == 'system' %}
@@ -42,5 +42,5 @@
     {%- endif %}
 {%- endfor %}
 {%- if add_generation_prompt %}
-    {{- '<|im_start|>assistant\n<think>\n\n</think>\n\n' }}
+    {{- '<|im_start|>assistant\n<think>\n\n</think>' }}
 {%- endif %}

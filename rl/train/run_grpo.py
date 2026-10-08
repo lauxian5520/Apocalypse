@@ -33,6 +33,9 @@ for _p in (REPO_ROOT, os.path.join(REPO_ROOT, "backend")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from rl.model_storage import configure_hf_home
+
+configure_hf_home()
 os.environ.setdefault("HARNESS_CORPUS_ENABLED", "true")
 
 logger = logging.getLogger(__name__)

@@ -328,7 +328,8 @@ python -m rl.train.run_sft train --trajectories rl/data/sft/teacher.jsonl \
     --base Qwen/Qwen2.5-1.5B-Instruct --out rl/data/adapters/sft
 
 # 3. 起 vLLM（独立进程，必须开运行时 LoRA 热插拔）
-VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 vllm serve Qwen/Qwen2.5-1.5B-Instruct \
+HF_HOME="$PWD/rl/data/models/huggingface" VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 \
+    vllm serve Qwen/Qwen2.5-1.5B-Instruct \
     --enable-lora --max-lora-rank 32 --max-loras 1 --port 8000
 
 # 4. 先冒烟（2 题 · G=2 · 1 步），再正式跑

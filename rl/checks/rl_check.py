@@ -493,7 +493,9 @@ def check_multi_gpu_layout() -> str:
         else:
             raise AssertionError("训练与 vLLM GPU 重叠未被拒绝")
         argv, env = command("Qwen/Qwen3-8B", "6,7", 2, 8000, 0.85, 16384)
-        if env["CUDA_VISIBLE_DEVICES"] != "6,7" or "--tensor-parallel-size" not in argv:
+        if (env["CUDA_VISIBLE_DEVICES"] != "6,7" or "--tensor-parallel-size" not in argv
+                or argv[argv.index("--served-model-name") + 1] != "Qwen/Qwen3-8B"
+                or os.path.dirname(argv[0]) != env["PATH"].split(os.pathsep)[0]):
             raise AssertionError("vLLM 启动参数没有隔离两张推理卡")
         return "6 张训练卡 + 2 张推理卡校验通过 · GPU 重叠被拒绝"
     finally:
@@ -518,7 +520,9 @@ def check_policy_adapter() -> str:
     import json as _json
 
     from rl.env import template
-    from rl.env.policy_adapter import PolicyAdapter, SampledStep, parse_tool_calls
+    from rl.env.policy_adapter import (PolicyAdapter, SampledStep,
+                                       _completion_ids, _completion_logprobs,
+                                       parse_tool_calls)
 
     raw = ('好。\n<tool_call>\n{"name": "corpus_search", '
            '"arguments": {"query": "nietzsche"}}\n</tool_call>')
@@ -545,6 +549,16 @@ def check_policy_adapter() -> str:
     adapter = PolicyAdapter.__new__(PolicyAdapter)
     adapter._verify(SampledStep(completion_token_ids=ids,
                                 logp_old=[-0.1] * len(ids), text=text))
+
+    # vLLM 0.29 puts token_ids on the choice, and strips a sampled terminal
+    # <|im_end|> from choice.text while retaining its token id and logprob.
+    choice = {"token_ids": ids, "text": text[:-len(template.END_OF_TURN)],
+              "logprobs": {"token_logprobs": [-0.1] * len(ids)}}
+    if _completion_ids(choice) != ids or len(_completion_logprobs(choice)) != len(ids):
+        raise AssertionError("vLLM completion 的 token id 与 logprob 未能对齐")
+    adapter._verify(SampledStep(completion_token_ids=_completion_ids(choice),
+                                logp_old=_completion_logprobs(choice),
+                                text=choice["text"]))
 
     for broken, why in (
         (SampledStep(completion_token_ids=ids, logp_old=[-0.1] * (len(ids) - 1), text=text),
@@ -611,7 +625,7 @@ def check_grpo_loss() -> str:
     positions = grpo.selected_positions(mask)
     sparse_loss, sparse_stats = grpo.selected_token_loss(
         sparse_logits[:, positions], ids, mask, positions, advantages,
-        logp_old.clone(), ref_logp=logp_old.clone())
+        logp_old.clone(), ref_logp=logp_old[:, positions + 1].clone())
     sparse_loss.backward()
     if not torch.allclose(sparse_loss, loss, atol=1e-6) or not torch.allclose(
             sparse_logits.grad, logits.grad, atol=1e-6):

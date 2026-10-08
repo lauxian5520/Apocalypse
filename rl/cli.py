@@ -17,6 +17,9 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+from rl.model_storage import configure_hf_home
+
+configure_hf_home()
 # The corpus tools are gated off by default so the production website never sees
 # them (`ToolRegistry._MODULE_GATES`). This CLI *is* the RL entry point, so it
 # turns them on — and it has to happen before anything imports `core.config`,

@@ -19,7 +19,9 @@ data/corpus/*.partial
 data/trajectories/
 data/sft/
 data/adapters/
+data/models/
 data/metrics/
+data/eval/
 data/_downloads/
 data/corpus_pilot/
 data/corpus_arxiv50k/

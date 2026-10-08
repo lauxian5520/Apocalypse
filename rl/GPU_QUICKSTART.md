@@ -43,9 +43,17 @@ pip install -r rl/requirements.txt -r rl/requirements-trainer.txt
 |---|---|---|
 | 系统 | glibc ≥ 2.31，即 Ubuntu 20.04 及以上 | vLLM 依赖的 `llguidance` 只发了 `manylinux_2_31` 的轮子，pip 报「找不到版本」 |
 | 网络 | 国内机器先 `export HF_ENDPOINT=https://hf-mirror.com` | 语料、tokenizer、权重全部从 Hub 下载；这个变量对 transformers、vLLM 和第 2 步的语料下载都生效 |
-| 磁盘 | 系统盘小的机器，`export HF_HOME=<数据盘>/hf` | vLLM 与 torch 的轮子加上 1.5B / 7B 权重有二三十 GB |
+| 磁盘 | 确保 `rl/data/` 所在磁盘有足够空间 | 基座模型默认缓存到 `rl/data/models/huggingface/`；SFT LoRA 默认写入 `rl/data/adapters/sft/` |
 
-建议把这两个 `export` 写进 `~/.bashrc`，第 4 步另开的终端里也需要它们。
+`rl.cli`、SFT、GRPO 和 `rl.train.launch_vllm` 会在加载模型库前设置默认 `HF_HOME`。
+若直接运行 `vllm serve` 或 `hf download`，需要在**那个进程**启动前设置：
+
+```bash
+export HF_HOME="$PWD/rl/data/models/huggingface"
+```
+
+显式设置的 `HF_HOME` 或 `HF_HUB_CACHE` 会覆盖项目默认值。`HF_ENDPOINT` 如需使用，
+建议写进 `~/.bashrc`；另开的终端同样需要它。
 
 `rl/requirements.txt` 里的 `sqlalchemy` / `pydantic-settings` / `httpx` 不是可选的：
 `rl/` 以库的方式 import `backend/harness`，而 `harness/__init__.py` 是一个 eager facade，
@@ -80,7 +88,8 @@ python -m rl.checks.rl_check --offline
 
 ```bash
 # 起 vLLM（独立进程）。VLLM_ALLOW_RUNTIME_LORA_UPDATING 必须设
-VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 vllm serve Qwen/Qwen2.5-0.5B-Instruct \
+HF_HOME="$PWD/rl/data/models/huggingface" VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 \
+    vllm serve Qwen/Qwen2.5-0.5B-Instruct \
     --enable-lora --max-lora-rank 32 --max-loras 1 --port 8000 \
     --gpu-memory-utilization 0.35 &
 
@@ -145,7 +154,8 @@ python -m rl.train.run_sft train \
 ## 6. GRPO
 
 ```bash
-VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 vllm serve Qwen/Qwen2.5-1.5B-Instruct \
+HF_HOME="$PWD/rl/data/models/huggingface" VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 \
+    vllm serve Qwen/Qwen2.5-1.5B-Instruct \
     --enable-lora --max-lora-rank 32 --max-loras 1 --port 8000 \
     --gpu-memory-utilization 0.35 &
 
@@ -190,7 +200,7 @@ trainer 和 vLLM 是**两个进程**，各自一个显存分配器。24 GB 卡�
 
 ```bash
 # 1 号卡只给 vLLM。独占一张卡时不需要再压 --gpu-memory-utilization
-CUDA_VISIBLE_DEVICES=1 VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 vllm serve Qwen/Qwen2.5-1.5B-Instruct \
+CUDA_VISIBLE_DEVICES=1 HF_HOME="$PWD/rl/data/models/huggingface" VLLM_ALLOW_RUNTIME_LORA_UPDATING=1 vllm serve Qwen/Qwen2.5-1.5B-Instruct \
     --enable-lora --max-lora-rank 32 --max-loras 1 --port 8000 &
 
 # 0 号卡只给训练
@@ -216,7 +226,8 @@ python -m rl.train.launch_vllm --base Qwen/Qwen3-8B --gpus 6,7 --tp 2 \
 # 此处也可改用 0..7 八张卡、--nproc_per_node=8。
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 torchrun --standalone --nproc_per_node=6 \
     -m rl.train.run_sft train --trajectories rl/data/sft/teacher.jsonl \
-    --base Qwen/Qwen3-8B --out rl/data/adapters/sft-qwen3
+    --base Qwen/Qwen3-8B --out rl/data/adapters/sft-qwen3 \
+    --checkpoint-every 50
 
 # 终端 B：GRPO。训练进程会确认所声明的推理卡与训练卡不重叠。
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 torchrun --standalone --nproc_per_node=6 \
@@ -227,6 +238,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 torchrun --standalone --nproc_per_node=6 \
 
 其他单机服务器只需修改 `CUDA_VISIBLE_DEVICES`、`--nproc_per_node`、`--gpus` 和 `--tp`。
 训练至少需要两张卡才会启用 FSDP2；单进程仍走原来的单卡路径。vLLM 的 GPU 数量须等于 `--tp`。
+SFT 的中途 LoRA 存在 `<输出目录>.checkpoints/step-XXXXXX/`。若训练中断，可用该目录作
+`--adapter`，并用对应步号作 `--resume-step`；样本顺序保持一致，优化器会重新初始化。
 本地模型目录名没有 `Qwen2.5` 或 `Qwen3` 时，在 SFT/GRPO 命令中明确添加
 `--template-family qwen2.5` 或 `--template-family qwen3`。工具调用格式只验证了这两代 Qwen。
 

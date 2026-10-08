@@ -21,15 +21,23 @@ different things.
 """
 import argparse
 import asyncio
+from collections import Counter
+import hashlib
+import json
 import logging
 import os
+import shutil
 import sys
+import time
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 for _p in (REPO_ROOT, os.path.join(REPO_ROOT, "backend")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from rl.model_storage import configure_hf_home
+
+configure_hf_home()
 os.environ.setdefault("HARNESS_CORPUS_ENABLED", "true")
 
 logger = logging.getLogger(__name__)
@@ -48,7 +56,7 @@ def collect(args) -> int:
     from rl.env.adapter import EvalAdapter
     from rl.env.build import PRESET, corpus_dir
     from rl.rollout import engine
-    from rl.rollout.trajectory import EnvStamp, write_jsonl
+    from rl.rollout.trajectory import EnvStamp, read_jsonl, write_jsonl
     from rl.tasks import split as split_mod
 
     tasks = split_mod.load(args.splits_dir, args.split)
@@ -68,18 +76,73 @@ def collect(args) -> int:
         prompt_sha256=prompt_sha256(registry),
     )
 
-    print(f"采样 {len(tasks)} 题 × G={args.group_size} · 模型 {llm.model} · 并发 {args.concurrency}")
-    trajectories, stats = asyncio.run(engine.run_many(
-        tasks, engine.shared(llm), stamp, concurrency=args.concurrency,
-        group_size=args.group_size, schedule="refill",
-    ))
-
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
-    write_jsonl(args.out, trajectories)
-    ok = [t for t in trajectories if t.ok]
-    correct = sum(1 for t in ok if t.reward.get("correct"))
-    print(f"完成 {len(ok)}/{len(trajectories)} 条 · 通过验证器 {correct}"
-          f"（{correct / max(len(ok), 1):.1%}）· {stats.to_dict()['wall_seconds']}s")
+    chunk_dir = args.out + ".chunks"
+    run_config = {
+        "split": args.split, "task_ids": [task["task_id"] for task in tasks],
+        "group_size": args.group_size, "temperature": args.temperature,
+        "chunk_size": args.chunk_size, "endpoint_sha256": hashlib.sha256(llm.url.encode()).hexdigest(),
+        "stamp": stamp.to_dict(),
+    }
+    config_path = os.path.join(chunk_dir, "run.json")
+    if args.resume:
+        if not os.path.isdir(chunk_dir):
+            raise SystemExit(f"续跑目录不存在：{chunk_dir}")
+        with open(config_path, encoding="utf-8") as f:
+            if json.load(f) != run_config:
+                raise SystemExit(f"续跑参数或环境与原采集不符：{config_path}")
+    else:
+        if os.path.exists(args.out) or os.path.exists(chunk_dir):
+            raise SystemExit(f"输出已存在：{args.out}；若要续跑，请添加 --resume")
+        os.makedirs(chunk_dir)
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(run_config, f, ensure_ascii=False, indent=2)
+
+    batches = [tasks[i:i + args.chunk_size] for i in range(0, len(tasks), args.chunk_size)]
+    stamp_dict = stamp.to_dict()
+    total = successful = correct = 0
+    print(f"采样 {len(tasks)} 题 × G={args.group_size} · 模型 {llm.model} · 并发 {args.concurrency}"
+          f" · 每批 {args.chunk_size} 题 · 共 {len(batches)} 批", flush=True)
+    for index, batch in enumerate(batches):
+        path = os.path.join(chunk_dir, f"{index:05d}.jsonl")
+        if os.path.exists(path):
+            trajectories = read_jsonl(path)
+            expected = Counter({task["task_id"]: args.group_size for task in batch})
+            actual = Counter(t.task_id for t in trajectories)
+            if actual != expected or any(t.stamp != stamp_dict for t in trajectories):
+                raise SystemExit(f"续跑批次与当前任务/环境不符：{path}")
+        else:
+            for attempt in range(args.batch_retries + 1):
+                trajectories, _ = asyncio.run(engine.run_many(
+                    batch, engine.shared(llm), stamp, concurrency=args.concurrency,
+                    group_size=args.group_size, schedule="refill", progress_every=0,
+                ))
+                if any(t.ok for t in trajectories):
+                    break
+                if attempt == args.batch_retries:
+                    raise SystemExit(f"整批 {index + 1} 连续 {attempt + 1} 次全部失败，"
+                                     "停止采集；修复 provider 后用 --resume 重试")
+                delay = min(15 * 2 ** attempt, 120)
+                print(f"  第 {index + 1} 批全部失败，{delay}s 后重试"
+                      f"（{attempt + 1}/{args.batch_retries}）", flush=True)
+                time.sleep(delay)
+            temporary = path + ".tmp"
+            write_jsonl(temporary, trajectories)
+            os.replace(temporary, path)
+        total += len(trajectories)
+        successful += sum(t.ok for t in trajectories)
+        correct += sum(t.ok and bool(t.reward.get("correct")) for t in trajectories)
+        print(f"  {index + 1}/{len(batches)} 批 · {total} 条已落盘 · "
+              f"成功 {successful} · 答对 {correct}", flush=True)
+
+    temporary = args.out + ".tmp"
+    with open(temporary, "wb") as merged:
+        for index in range(len(batches)):
+            with open(os.path.join(chunk_dir, f"{index:05d}.jsonl"), "rb") as part:
+                shutil.copyfileobj(part, merged)
+    os.replace(temporary, args.out)
+    print(f"完成 {successful}/{total} 条 · 通过验证器 {correct}"
+          f"（{correct / max(successful, 1):.1%}）")
     print(f"写入 {args.out}")
 
     if correct == 0:
@@ -128,7 +191,7 @@ def train(args) -> int:
     model = PolicyModel(ModelConfig(
         model_name=args.base, learning_rate=args.lr, device=train_device,
         micro_batch_size=args.micro_batch_size,
-    ), accelerator=accelerator)
+    ), accelerator=accelerator, adapter=args.adapter)
 
     import random
     rng = random.Random(args.seed)
@@ -138,11 +201,18 @@ def train(args) -> int:
         rng.shuffle(order)
         for start in range(0, len(order), args.batch_size):
             batch = order[start:start + args.batch_size]
-            stats = model.sft_step(batch)
             step += 1
+            if step <= args.resume_step:
+                continue
+            stats = model.sft_step(batch)
             if step % args.log_every == 0 and main_rank:
                 print(f"  epoch {epoch} step {step:4}  loss {stats['loss']:.4f}  "
                       f"grad {stats['grad_norm']:.3f}  tokens {stats['trainable_tokens']}")
+            if args.checkpoint_every and step % args.checkpoint_every == 0:
+                checkpoint = model.save_adapter(
+                    os.path.join(args.out + ".checkpoints", f"step-{step:06d}"))
+                if main_rank:
+                    print(f"  step {step:4} checkpoint 写入 {checkpoint}", flush=True)
 
     path = model.save_adapter(args.out)
     if main_rank:
@@ -167,6 +237,9 @@ def main() -> int:
     c.add_argument("--base-url", default="", help="vLLM 地址；留空走配置的 provider")
     c.add_argument("--temperature", type=float, default=1.0)
     c.add_argument("--concurrency", type=int, default=8)
+    c.add_argument("--chunk-size", type=int, default=25, help="每批题数；每批结束立即落盘")
+    c.add_argument("--batch-retries", type=int, default=2, help="整批全部失败时退避重试次数")
+    c.add_argument("--resume", action="store_true", help="跳过已完成且环境一致的批次")
     c.add_argument("--seed", type=int, default=0)
     c.add_argument("--out", default=os.path.join(REPO_ROOT, "rl/data/sft/teacher.jsonl"))
     c.add_argument("--splits-dir", default=os.path.join(REPO_ROOT, "rl/data/splits"))
@@ -175,6 +248,11 @@ def main() -> int:
     t = sub.add_parser("train", help="筛选并微调（需要 GPU）")
     t.add_argument("--trajectories", default=os.path.join(REPO_ROOT, "rl/data/sft/teacher.jsonl"))
     t.add_argument("--base", default="Qwen/Qwen2.5-1.5B-Instruct")
+    t.add_argument("--adapter", default="", help="从已有 SFT LoRA 继续训练")
+    t.add_argument("--resume-step", type=int, default=0,
+                   help="跳过已训练的批次；需同时提供对应步的 --adapter（优化器重新初始化）")
+    t.add_argument("--checkpoint-every", type=int, default=0,
+                   help="每 N 步另存一次 LoRA；0 表示仅在训练结束时保存")
     t.add_argument("--template-family", choices=("qwen2.5", "qwen3"), default=None)
     t.add_argument("--out", default=os.path.join(REPO_ROOT, "rl/data/adapters/sft"))
     t.add_argument("--epochs", type=int, default=2)
@@ -189,6 +267,11 @@ def main() -> int:
     t.set_defaults(func=train)
 
     args = parser.parse_args()
+    if args.phase == "collect" and (args.group_size < 1 or args.concurrency < 1 or args.chunk_size < 1 or args.batch_retries < 0):
+        parser.error("-G、--concurrency 和 --chunk-size 必须大于 0；--batch-retries 不能小于 0")
+    if args.phase == "train" and (args.resume_step < 0 or args.checkpoint_every < 0 or
+                                   (args.resume_step and not args.adapter)):
+        parser.error("--resume-step 和 --checkpoint-every 不能小于 0；续训须提供 --adapter")
     return args.func(args)
 
 
