@@ -31,9 +31,37 @@ If Apocalypse is useful to you, consider giving it a ⭐. It helps other develop
 
 | Knowledge inputs | AI and execution | Capture and collaboration |
 |---|---|---|
-| GitHub Trending, Hugging Face, arXiv, multi-source news | Streaming chat, page summaries, explanations, tool calling | Markdown notes, multi-image posts, comments, direct messages |
+| GitHub Trending, Hugging Face, arXiv, conference papers, multi-source news | Streaming chat, page summaries, explanations, tool calling | Markdown notes, keyword search, multi-image posts, comments, direct messages |
 | Daily, weekly, and monthly feeds | Human approval, sandboxing, trajectory inspection, context compression | Local database, unified backups, admin console |
 | HotpotQA frozen corpus (66,581 passages, hashed) | Agentic RL: verifiers, concurrent rollout, GRPO | The event log is the training trajectory; environment fingerprints make runs reproducible |
+
+### Note keyword search
+
+Search note bodies from the Notes page. Results update as you type; press Enter or click Search to query immediately. Matching counts and pagination work with the public/private filter. Clear the keyword to restore the list. Search respects access permissions: private notes remain visible only to their author and administrators.
+
+### Conference papers
+
+The Papers page combines Hugging Face Daily Papers, arXiv, and official proceedings from **15 conferences: ICLR, ICML, NeurIPS (NIPS), AAAI, IJCAI, CVPR, ICCV, ECCV, ACL, EMNLP, NAACL, AISTATS, UAI, COLT, and CoRL**. Select Conference Papers to filter by conference, year, and research area, or search titles and authors.
+
+Sources include official conference directories, CVF, ECVA, ACL Anthology, and PMLR. Year choices start at 2020, with odd years for ICCV and even years for ECCV; unpublished proceedings may have no papers yet. Results are cached by conference and year for six hours, with existing cached data and a warning returned when a source fails. Area labels come from titles, official topics, and keywords; a paper can belong to multiple areas.
+
+The shared [conference registry](backend/scrapers/conference_catalog.py) supplies the frontend's options. Additional conferences can reuse an existing source adapter; new proceedings formats need a parser in [conference_papers.py](backend/scrapers/conference_papers.py).
+
+### Toolbox and live translation
+
+Search tool names and descriptions, then open a card. Alongside the Markdown editor, color tools, Pomodoro timer, password generator, and JSON formatter, the toolbox includes five browser utilities:
+
+| Tool | Behavior and limits |
+|---|---|
+| Text processing and statistics | Live character, non-whitespace character, Chinese character, English word, and line counts; remove blank lines, trim lines, deduplicate lines, and copy results |
+| Timestamp conversion | Convert Unix seconds or milliseconds and date/time values; display local time and UTC, fill in the current time, and copy results |
+| Encoding conversion | UTF-8 Base64 and URL encoding/decoding, including Chinese and emoji; run manually after selecting a mode, with clear errors for invalid input |
+| Image compression and conversion | Upload or drop JPEG, PNG, or WebP, up to 20 MB per file; defaults to WebP at 80% quality with a 1920-pixel maximum edge, preserving aspect ratio without upscaling; JPEG fills transparency with white, and PNG ignores quality; compare previews, dimensions, and sizes, then download |
+| Text diff | Line-by-line additions, deletions, unchanged content, and difference counts using longest common subsequence; up to 500 lines per side, with whitespace and trailing newlines included |
+
+These five utilities require no login, process text and images entirely in the browser, and discard inputs when closed. Inputs and results are displayed as plain text; clipboard failures prompt manual copying, and image previews are released when replaced or closed. Two-column tools stack vertically on mobile, and dialogs support scrolling.
+
+Live Translation is described as **in-site multilingual translation using a large language model**. It requires login and accepts up to 4,000 characters per request. The current backend uses DeepSeek via `DEEPSEEK_API_KEY`, `DEEPSEEK_API_URL`, and `DEEPSEEK_MODEL`, independently of the default `AI_PROVIDER`. Restart the backend after changing these settings. Development acceptance scripts and browser-check requirements are documented in [tools/README.md](tools/README.md).
 
 ### Agent workbench highlights
 
@@ -149,6 +177,9 @@ Copy `.env.example` to `.env`. The most important settings are:
 | `HARNESS_WRITE_APPROVAL` | Require approval for workspace writes; default `true` |
 | `HARNESS_AUTO_TITLE` | Automatic session titles |
 | `AI_PROVIDER` | `deepseek`, `gemini`, `zhipu`, `openai`, `ollama`, or `custom` |
+| `DEEPSEEK_API_KEY` | DeepSeek API key; also required by Live Translation |
+| `DEEPSEEK_API_URL` | Full DeepSeek chat endpoint; defaults to `https://api.deepseek.com/v1/chat/completions`, also used by Live Translation |
+| `DEEPSEEK_MODEL` | DeepSeek model; defaults to `deepseek-chat`, also used by Live Translation |
 | `JWT_SECRET` | Authentication and captcha signing secret; change before deployment |
 | `COOKIE_SECURE` | Enable after HTTPS is configured |
 | `HARNESS_REQUIRE_ADMIN` | Keep the agent workbench admin-only on public deployments |

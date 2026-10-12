@@ -33,7 +33,7 @@
 
 | 知识输入 | AI 与执行 | 沉淀与协作 |
 |---|---|---|
-| GitHub Trending、Hugging Face、arXiv、多平台热点 | 流式对话、页面总结、内容解释、工具调用 | Markdown 多图笔记、评论、私聊、附件 |
+| GitHub Trending、Hugging Face、arXiv、顶会论文、多平台热点 | 流式对话、页面总结、内容解释、工具调用 | Markdown 多图笔记、关键词搜索、评论、私聊、附件 |
 | 每日/每周/月度聚合 | 人工审批、沙箱、轨迹检查、上下文压缩 | 本地数据库、统一备份、后台管理 |
 | HotpotQA 冻结语料（66,581 段，哈希入清单） | Agentic RL：验证器、并发 rollout、GRPO | 事件日志即训练轨迹，环境指纹可复现 |
 
@@ -53,13 +53,41 @@
 - **🧩 Harness 智能体工作台** — 会话式 Agent：工具调用、人工审批、沙箱工作区、全链路事件日志、轨迹检查器、Token 计费、上下文压缩、会话 fork/replay、可拖拽分栏（详见下方专节）
 - **🧪 深研场（Agentic RL）** — 建在 Harness 之上的 Deep Research 强化学习环境：任务集、验证器、rollout 引擎、loss mask、GRPO（详见[下方专节](#-深研场deep-research-的-agentic-rl-环境)与 [rl/README.md](rl/README.md)）
 - **⚡ 热门项目** — GitHub Trending + HuggingFace 模型（每日/每周/每月）
-- **📄 前沿论文** — HuggingFace Daily Papers + arXiv，以及 ICLR、ICML、NeurIPS（NIPS）、AAAI、IJCAI、CVPR、ICCV、ECCV、ACL、EMNLP、NAACL、AISTATS、UAI、COLT、CoRL 官方论文目录；支持会议、年份、研究领域与标题/作者搜索，ICCV / ECCV 自动匹配举办年份。会议来源通过统一目录注册，新增会议后前端自动生成选项。领域按标题、官方主题与关键词归类，跨领域论文可出现在多个分类。
+- **📄 前沿论文** — HuggingFace Daily Papers、arXiv 与 15 个顶会的官方论文目录；支持会议、年份、研究领域筛选与标题/作者搜索，会议目录可扩展（见下方说明）。
 - **🔥 焦点新闻** — 多平台热点聚合
-- **🛠 工具箱** — Markdown 编辑器、颜色工具、番茄钟、密码生成器、JSON 格式化；新增文本处理与统计、时间戳转换、UTF-8 Base64 / URL 编解码、图片压缩与格式转换（JPEG / PNG / WebP，单文件最多 20 MB）、文本差异对比（每侧最多 500 行），五项新工具无需登录，仅在浏览器内处理，关闭后不保存输入。大语言模型站内多语言翻译登录后使用，每次最多 4000 字符；当前使用 DeepSeek 的 `DEEPSEEK_API_KEY` / `DEEPSEEK_API_URL` / `DEEPSEEK_MODEL`，独立于默认 AI Provider。
+- **🛠 工具箱** — Markdown 编辑器、颜色工具、番茄钟、密码生成器、JSON 格式化，以及文本处理与统计、时间戳转换、编码转换、图片压缩与格式转换、文本差异对比；支持搜索工具和大语言模型站内多语言翻译（见下方说明）。
 - **🎵 背景音乐** — 管理员上传/管理，全局悬浮播放器
 - **💬 私聊** — 用户间一对一消息，支持图片/文件附件
 - **🔐 用户系统** — Cookie 会话、头像上传、后台用户管理；生产默认关闭公开注册，通过管理员 CLI 创建受邀账号
 - **🛡 安全** — HMAC 无状态验证码、bcrypt 密码哈希、HttpOnly Cookie + CSRF 双提交校验
+
+### 笔记关键词搜索
+
+在“笔记”栏输入正文关键词即可搜索，也可按 Enter 或点击搜索按钮立即查询。结果显示匹配数量并支持分页；可结合公开/私密筛选，清空关键词后恢复列表。搜索只返回当前用户有权查看的笔记，私密内容仍仅作者和管理员可见。
+
+### 顶会论文目录
+
+在“前沿论文”栏切换到“顶会论文”，按会议、年份和研究领域筛选，或搜索标题及作者。当前收录 **ICLR、ICML、NeurIPS（NIPS）、AAAI、IJCAI、CVPR、ICCV、ECCV、ACL、EMNLP、NAACL、AISTATS、UAI、COLT、CoRL**，覆盖机器学习、计算机视觉、自然语言处理与机器人等方向。
+
+数据来自会议官方目录、CVF、ECVA、ACL Anthology 和 PMLR 等论文集。年份选项从 2020 年起，ICCV 使用奇数年、ECCV 使用偶数年；尚未发布的目录可能暂无论文。按会议和年份缓存 6 小时，获取失败时可回退到已有缓存并提示。研究领域按标题、官方主题与关键词归类，同一论文可属于多个领域。
+
+会议在 [conference_catalog.py](backend/scrapers/conference_catalog.py) 中统一注册，前端根据接口返回的目录生成选项；增加会议时可复用已有来源适配器，新的论文集格式需在 [conference_papers.py](backend/scrapers/conference_papers.py) 中补充解析。
+
+### 综合实用工具与实时翻译
+
+在“工具”栏搜索名称或描述，点击卡片打开工具。以下五项无需登录，文本和图片仅在浏览器内处理，关闭弹窗后不保存输入；手机上双栏上下排列，弹窗支持滚动。
+
+| 工具 | 功能与限制 |
+|---|---|
+| 文本处理与统计 | 实时统计字符、非空白字符、中文字符、英文单词和行数；去除空行、清理行首尾空格、逐行去重，支持复制结果 |
+| 时间戳转换 | Unix 秒／毫秒与日期时间互转，展示本地时间和 UTC；支持填入当前时间与复制 |
+| 编码转换 | UTF-8 Base64 与 URL 编解码，支持中文及 emoji；选择类型后手动转换，非法输入显示提示 |
+| 图片压缩与格式转换 | 上传或拖入 JPEG、PNG、WebP，单文件最多 20 MB；默认输出 WebP、质量 80%、最长边 1920 像素，保持比例且不放大；可选 JPEG / PNG，JPEG 透明区域填白，PNG 不使用质量参数；展示预览、尺寸和大小并支持下载 |
+| 文本差异对比 | 按行展示新增、删除和未修改内容及差异数量，采用最长公共子序列算法；每侧最多 500 行，空白和行尾换行参与对比 |
+
+文本输入与结果按纯文本展示；复制失败时提示手动复制，图片替换或关闭时释放预览资源。
+
+“实时翻译”的说明为 **大语言模型站内多语言翻译**，需登录，每次最多 4000 字符。当前翻译后端使用 DeepSeek，配置 `DEEPSEEK_API_KEY`、`DEEPSEEK_API_URL` 和 `DEEPSEEK_MODEL`，独立于默认 `AI_PROVIDER`；修改配置后重启后端。开发验收脚本及浏览器检查说明见 [tools/README.md](tools/README.md)。
 
 ## 📂 项目结构
 
@@ -95,10 +123,13 @@ Apocalypse/
 │   │   ├── memo_service.py   #   帖子加载与匿名投影
 │   │   ├── captcha_service.py
 │   │   ├── feed_service.py   #   抓取调度 + JSON 缓存
+│   │   ├── conference_service.py # 顶会论文缓存、搜索、领域筛选与分页
 │   │   └── classify_service.py
 │   ├── routers/              # HTTP 层：解析请求 → 调 service → 返回 schema
 │   │   └── __init__.py       #   api_router：URL 映射的唯一定义处
 │   ├── scrapers/             # 外部数据采集（纯抓取，不关心存储）
+│   │   ├── conference_catalog.py # 会议注册与举办年份目录
+│   │   └── conference_papers.py  # 官方论文集来源适配器
 │   ├── data/prompts/         #   ⭐ 纯数据：精灵「天启」的人格提示词
 │   └── harness/              # 智能体子系统：与 services 同层，内部不出现 fastapi
 │       ├── context.py        #   装配点：所有接缝在这里选定实现
@@ -123,6 +154,7 @@ Apocalypse/
 │       ├── core/             #   utils → auth → api → ui（按此顺序加载）
 │       ├── widgets/          #   floating-panel（拖动/缩放）、split-pane（分栏拖拽）、sprite-chat、music-player
 │       └── pages/            #   每页专属逻辑
+│           └── local-tools.js #  五项浏览器本地工具与资源清理
 │
 ├── var/                      # ⚠️ 运行时数据（备份前停写，通过备份工具生成快照）
 │   ├── db/                   #   SQLite 数据库
@@ -472,7 +504,9 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml exec backe
 | `VAR_DIR` | 运行时数据根目录，一个开关搬走全部状态 | `./var` |
 | `DB_TYPE` | 数据库类型；默认使用 SQLite | `sqlite \| mysql \| postgresql` |
 | `AI_PROVIDER` | AI 提供商 | `deepseek \| gemini \| zhipu \| openai \| ollama \| custom` |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key | `sk-xxx` |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key；实时翻译使用此配置 | `sk-xxx` |
+| `DEEPSEEK_API_URL` | DeepSeek 聊天接口完整地址；实时翻译使用此配置 | `https://api.deepseek.com/v1/chat/completions` |
+| `DEEPSEEK_MODEL` | DeepSeek 模型；实时翻译使用此配置 | `deepseek-chat` |
 | `JWT_SECRET` | 签名密钥（**务必修改**，同时用于登录与验证码） | 随机字符串 |
 | `COOKIE_SECURE` | 是否仅 HTTPS 发送 Cookie | `false`（开发）/ `true`（生产） |
 | `ALLOWED_ORIGINS` | CORS 白名单 | `http://localhost:8000` |
