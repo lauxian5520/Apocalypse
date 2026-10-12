@@ -11,16 +11,41 @@ and the `_comment` keys inside JSON data files.
 
 ```bash
 # Local dev — the backend also serves the frontend, so this is the whole stack on :8000
-cd backend && pip install -r requirements.txt && python main.py
+python -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements.txt -c constraints/web-py312.txt
+cd backend && ../.venv/bin/python main.py
 
-# Docker (production shape: nginx in front, ./var as the single state volume)
+# First account. The password is read interactively — never a CLI argument.
+cd backend && python -m cli.users admin admin@example.com --admin
+
+# Docker, dev shape — nginx on :80, ./var as the single state volume
 docker compose up -d
 
-# Swagger at /docs, health at /healthz
+# Swagger at /docs, health at /healthz, readiness at /readyz
 ```
 
-There is **no test framework** (no pytest in `requirements.txt`). Verification is done with the
-probe scripts in `tools/`, run from `backend/` so imports resolve:
+Install with `-c constraints/web-py312.txt`. The Dockerfile, CI and `docs/DELIVERY.md` all pin
+with it; installing without it gives you *different* versions than production runs.
+
+There is **no test framework** (no pytest in `requirements.txt`), **no linter and no typechecker** —
+nothing named ruff, flake8, black, mypy, eslint or prettier exists anywhere in the tree. Every
+mechanical gate is a hand-written script under `tools/`, and CI runs the aggregator, not the scripts:
+
+```bash
+python tools/release_check.py --group web    # syntax config web agent backup harness browser
+python tools/release_check.py --group rl     # rl-inputs rl-delivery rl
+python tools/release_check.py --group all    # the default
+python tools/release_check.py --syntax-only  # the closest thing here to a linter
+```
+
+Run it from the **repository root**. Each stage is a subprocess with a 600s timeout; per-stage logs
+and `artifacts/checks/results.json` land in `artifacts/checks/`, and any stage that is not `passed`
+exits non-zero. There is **no per-stage flag** — to run one gate alone, invoke its script directly
+from the repository root (`python tools/web_check.py`, `python tools/config_check.py`,
+`python tools/backup_check.py`, …). `tools/README.md` indexes all of them.
+
+The probes below answer "is this one subsystem wired up", not "does this pass", and are documented
+as run from `backend/`:
 
 ```bash
 cd backend
@@ -38,7 +63,7 @@ The RL workbench in `rl/` has its own staged check and its own CLI. Both run **f
 repository root**, not from `backend/` — the opposite of `tools/`:
 
 ```bash
-python -m rl.checks.rl_check --offline    # 19 stages, no tokens; 20 with a real rollout
+python -m rl.checks.rl_check --offline    # 25 stages; only the real-provider rollout is skipped
 python -m rl.cli corpus hotpot --split validation && python -m rl.cli corpus index
 python -m rl.cli corpus verify            # re-hash docs.jsonl against its manifest
 python -m rl.cli tasks leakage --all --model deepseek-chat --resume --out data/leak.jsonl
@@ -79,6 +104,43 @@ traceback, so a missing one is a reduced feature, not a broken deploy:
 The image also carries no CJK font (`fonts-dejavu-core` has no Han glyphs), so adding LibreOffice
 alone would still render a Chinese deck as tofu. Generated `.docx`/`.pptx` are unaffected: they
 embed no fonts and render on the viewer's machine.
+
+## Deployment
+
+`docker-compose.yml` is the **dev** shape — nginx on `:80`, no TLS, the backend `expose`d but never
+published. `docker-compose.production.yml` layers the production shape on top: `APP_ENV=production`,
+`COOKIE_SECURE=true`, registration closed, Harness admin-only with the shell off, and nginx on
+`:443` reading `deploy/certs/`. **Both files must be passed** — a plain `docker compose up` silently
+gives you the dev shape instead:
+
+```bash
+mkdir -p var && sudo chown -R 10001:10001 var   # the container runs as uid 10001
+docker compose -f docker-compose.yml -f docker-compose.production.yml up --build -d --wait
+docker compose -f docker-compose.yml -f docker-compose.production.yml exec backend \
+    python -m cli.users admin admin@example.com --admin
+```
+
+Compose **concatenates** `ports` across `-f` files rather than replacing them, so production
+publishes 80 *and* 443 — 80 exists only to `return 301 https://…`. TLS material is not in the repo
+(`deploy/certs/` is gitignored): put `fullchain.pem` and `privkey.pem` there, and reload nginx
+after a renewal.
+
+A weak config is a startup failure, not a warning — see the `app_env == "production"` validator in
+`core/config.py`, and `tools/config_check.py` for a mechanical assertion of each of its rules.
+`docs/DELIVERY.md` is the full manual: acceptance, the live-provider budget, backup/restore/
+rollback (`tools/backup.py`, `tools/backup_check.py`) and packaging.
+
+CI is `.github/workflows/checks.yml` — three jobs on every PR and on `main`, and `release.yml`
+reuses that same workflow before a `v*.*.*` tag is allowed to create a release:
+
+| job | what it runs |
+|---|---|
+| `web` | `pip check`, then `release_check.py --group web` |
+| `rl` | installs `torch==2.13.0+cpu`, then `release_check.py --group rl` |
+| `container` | brings up the **production** compose stack, asserts `https://localhost/readyz` succeeds, that plain HTTP returns `301`, and that the backend survives a restart |
+
+`container` is the job that catches a change which only works in the dev shape. Read it before
+concluding a change is safe to ship.
 
 ## Layering
 
@@ -356,9 +418,11 @@ one — check before repeating a capability claim from it.
 The sandbox is a fence, not a jail. It guards against the agent doing something unintended (prompt
 injection in fetched content, a misread instruction), not against a malicious operator. The **code**
 defaults are the safe ones — `HARNESS_REQUIRE_ADMIN=true`, `HARNESS_SHELL_ENABLED=false` — and a new
-deployment should start there. **This deployment's `.env` deliberately sets
-`HARNESS_SHELL_ENABLED=true`**, because the document skills run scripts. From that point the
-approval prompt carries the whole risk, so do not weaken it to compensate.
+deployment should start there. **Production mode enforces both**: `core/config.py` raises
+`ValueError` when `harness_shell_enabled` is true or `harness_require_admin` is false, so an
+`APP_ENV=production` deployment cannot be started with the shell on. Enabling it on a development
+deployment is what hands the approval prompt the entire risk budget — from that point do not
+weaken it to compensate.
 
 - Commands run via `execve` on parsed argv — **never through a shell**. Bare shell operators are
   rejected; a quoted `;` is fine because nothing interprets it.
