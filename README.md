@@ -407,6 +407,8 @@ RL 与 Web 共用 `harness/corpus/` 和事件投影接口，保持 `rl/ → harn
 
 **训练成果**：Qwen3-8B 完成 SFT 710 步与 GRPO 500 步，保留了 adapter、训练日志和逐题轨迹。
 
+Hugging Face 权重： [SFT adapter](https://huggingface.co/lauxian5520/apocalypse-qwen3-8b-sft) · [GRPO-500 adapter](https://huggingface.co/lauxian5520/apocalypse-qwen3-8b-grpo500) · [作者主页](https://huggingface.co/lauxian5520)。这两个仓库发布的是 LoRA adapter，使用时还需要 `Qwen/Qwen3-8B` 基座。
+
 | 切分 | 基座 | SFT | GRPO-500 |
 |---|---|---|---|
 | dev（457 题） | 97/457（21.2%） | 170/457（37.2%） | 187/457（40.9%） |

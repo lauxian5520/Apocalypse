@@ -67,6 +67,8 @@ RL shares corpus tools and event projection with Harness while retaining the one
 
 **Training results:** Qwen3-8B completed 710 SFT steps and 500 GRPO steps. The adapters, training logs, and per-task trajectories are available.
 
+Hugging Face weights: [SFT adapter](https://huggingface.co/lauxian5520/apocalypse-qwen3-8b-sft) · [GRPO-500 adapter](https://huggingface.co/lauxian5520/apocalypse-qwen3-8b-grpo500) · [author profile](https://huggingface.co/lauxian5520). These repositories contain LoRA adapters and require the `Qwen/Qwen3-8B` base model.
+
 | Split | Base | SFT | GRPO-500 |
 |---|---|---|---|
 | dev (457 tasks) | 97/457 (21.2%) | 170/457 (37.2%) | 187/457 (40.9%) |

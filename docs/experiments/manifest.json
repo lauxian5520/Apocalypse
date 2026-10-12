@@ -228,8 +228,8 @@
       "sha256": "afa00ff29192e42b7e06b84c30908c2c6b1064e877b61bed3475442c4c73d4cc"
     },
     "rl/data/adapters/grpo-qwen3-12steps/policy-step-000500/README.md": {
-      "bytes": 5180,
-      "sha256": "01a98f7bdd529421030ef1e6ba80e1a301f35b9278985b45b086f69e0fd3d6e1"
+      "bytes": 6961,
+      "sha256": "718b74f8c020e36f1b2ccefa97bbefa812b88f9f7f33caf6c5cb06c16d26287d"
     },
     "rl/data/adapters/grpo-qwen3-12steps/policy-step-000500/adapter_config.json": {
       "bytes": 1168,
@@ -252,8 +252,8 @@
       "sha256": "c4f4c62b741ab2940841480f9942f378d7d3878d47c2babb862af7381c59b952"
     },
     "rl/data/adapters/sft-qwen3/README.md": {
-      "bytes": 5180,
-      "sha256": "01a98f7bdd529421030ef1e6ba80e1a301f35b9278985b45b086f69e0fd3d6e1"
+      "bytes": 6423,
+      "sha256": "b4ab644f6278f959dc639f477f5c902fccad69cc49ef02c84be68384836f04b3"
     },
     "rl/data/adapters/sft-qwen3/adapter_config.json": {
       "bytes": 1168,

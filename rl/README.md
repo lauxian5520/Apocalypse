@@ -373,6 +373,8 @@ python -m rl.checks.rl_check --offline
 以及完整 dev/test 对照。test 上 SFT 为 162/459（35.3%），GRPO-500 为
 190/459（41.4%）；格式合法率同时下降，尚需进一步研究。
 
+权重已发布为 Hugging Face LoRA adapter：[SFT](https://huggingface.co/lauxian5520/apocalypse-qwen3-8b-sft) · [GRPO-500](https://huggingface.co/lauxian5520/apocalypse-qwen3-8b-grpo500)。加载时需要同时提供 `Qwen/Qwen3-8B` 基座。更多模型卡与权重校验信息见各模型仓库。
+
 可核验报告、历史记录限制、产物清单和重新计算命令见
 [交付实验报告](../docs/experiments/README.md)。本轮不追加完整训练或消融。
 历史训练提交未被记录，当前打包提交不能当作训练提交。

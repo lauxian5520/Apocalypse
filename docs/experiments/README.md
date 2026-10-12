@@ -1,5 +1,7 @@
 # 已有 Qwen3-8B 实验成果
 
+公开权重（LoRA adapter）：[SFT](https://huggingface.co/lauxian5520/apocalypse-qwen3-8b-sft) · [GRPO-500](https://huggingface.co/lauxian5520/apocalypse-qwen3-8b-grpo500)。两者都需要 `Qwen/Qwen3-8B` 基座；不能作为完整模型单独加载。
+
 已有本地记录：SFT 710 步、GRPO 500 步；本轮交付未重新训练。
 主指标使用完整选定题目数，错误与缺失按失败计。有效轨迹指标单独列出。
 
