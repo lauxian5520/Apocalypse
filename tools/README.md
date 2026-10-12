@@ -8,6 +8,9 @@ Docker image — run them by hand from the repository root.
 | `ai_probe.py` | Calls the configured AI provider directly (blocking + streaming) to check that the key, URL and model in `.env` actually work. |
 | `check_scrapers.py` | Runs the GitHub / HuggingFace / papers scrapers once and prints what came back. |
 | `check_feeds.py` | Refreshes the hot-topic feed and summarises the categories written to `var/feeds/focus.json`. |
+| `conference_translation_check.py` | Isolated checks for conference sources, filtering, caching and authenticated DeepSeek translation. Add `--browser` for desktop/mobile UI checks (requires Playwright and `/usr/bin/chromium`). Uses synthetic feeds and a local mock model. |
+| `toolbox_check.py` | Desktop/mobile browser acceptance for the five local utilities, clipboard/download, image transparency and URL cleanup, line limits, and existing tools/translation. Run `.venv/bin/python tools/toolbox_check.py`; requires Playwright and `/usr/bin/chromium`, and uses an isolated static server with mocked APIs. |
+| `memo_search_check.py` | Isolated real-API checks for memo keyword search, literal wildcard characters, pagination, anonymity and private access. Add `--browser` for desktop/mobile search, debounce, Chinese input, clearing and request ordering (requires Playwright and `/usr/bin/chromium`). |
 | `harness_check.py` | Connectivity self-check for the Harness subsystem: config, database, sandbox, tool registry, tool auto-discovery, skills, subagent wiring, artefact download (incl. packaged-skill install), approval policy, event-log projection, the live provider, and optionally the HTTP + SSE layer. Each stage runs independently and exits non-zero if any fail. |
 | `harness_probe.py` | Drives one complete Harness turn with no browser and no server, printing the event log, the projected messages, token usage and the resulting workspace files. |
 

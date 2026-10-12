@@ -52,15 +52,21 @@ def load_memo(memo_id: int, db: Session, viewer: User | None = None) -> Memo:
     return memo
 
 
-def list_memos(db: Session, *, visibility: str, page: int, page_size: int, viewer: User | None = None) -> tuple[int, list[Memo]]:
+def list_memos(
+    db: Session, *, visibility: str, page: int, page_size: int,
+    viewer: User | None = None, q: str = "",
+) -> tuple[int, list[Memo]]:
     if visibility == "private" and viewer is None:
         raise PermissionError_("请先登录")
     query = (
         _with_relations(db.query(Memo))
         .filter(Memo.visibility == visibility)
         .filter(readable_clause(viewer))
-        .order_by(Memo.pinned.desc(), Memo.created_at.desc())
+        .order_by(Memo.pinned.desc(), Memo.created_at.desc(), Memo.id.desc())
     )
+    keyword = q.strip()
+    if keyword:
+        query = query.filter(Memo.content.icontains(keyword, autoescape=True))
     total = query.count()
     memos = query.offset((page - 1) * page_size).limit(page_size).all()
     return total, memos

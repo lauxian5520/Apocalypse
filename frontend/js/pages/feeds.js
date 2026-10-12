@@ -114,6 +114,7 @@ function renderPaperCard(item, catName = '') {
       <p class="feed-desc" style="display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden">${escHtml(item.abstract || '暂无摘要')}</p>
       <div class="feed-meta" style="margin-top:auto">
         ${catName ? `<span class="tag tag-active">${escHtml(catName)}</span>` : ''}
+        ${item.conference ? `<span class="tag">${escHtml(item.conference)}</span>` : ''}
         ${item.year ? `<span class="tag">${escHtml(item.year)}</span>` : ''}
         ${authors ? `<span class="tag" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(authors)}">👤 ${escHtml(authors)}</span>` : ''}
         <span>${item.upvotes !== undefined ? '👍 ' + item.upvotes : (item.citations !== undefined && item.citations !== 0 ? '引用 ' + item.citations : '')}</span>

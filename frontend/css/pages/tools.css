@@ -11,3 +11,72 @@ body { padding-top: 80px; }
 .tool-desc { font-size: 0.82rem; color: var(--text-2); }
 .tool-card:hover .tool-icon { animation: bounce 0.4s ease; }
 @keyframes bounce { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+.modal:has(#translation-form) { width: min(960px, 95vw); max-width: 960px; max-height: 90vh; overflow-y: auto; }
+.modal:has(#translation-form) .modal-close { position: sticky; top: 0; float: right; z-index: 1; background: var(--bg-1); }
+.translation-hint { color: var(--text-2); font-size: .85rem; margin: .6rem 0 1.2rem; }
+.translation-languages, .translation-actions { display: flex; align-items: center; gap: .8rem; margin: 1rem 0; }
+.translation-languages label { flex: 1; }
+.translation-languages select { display: block; width: 100%; padding: .65rem; margin-top: .4rem; background: var(--bg-2, #181828); color: var(--text-1); border: 1px solid var(--border); border-radius: 8px; }
+.translation-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.translation-panels label { min-width: 0; font-size: .9rem; }
+.translation-panels textarea { margin-top: .5rem; width: 100%; min-height: 220px; resize: vertical; }
+.translation-actions span { margin-right: auto; color: var(--text-2); font-size: .8rem; }
+#translation-status { min-height: 1.5em; font-size: .85rem; color: var(--text-2); overflow-wrap: anywhere; }
+@media (max-width: 640px) { .translation-panels { grid-template-columns: 1fr; } .translation-panels textarea { min-height: 150px; } }
+
+/* Shared modal scrolling keeps the close control visible on short screens. */
+body.tool-modal-open { overflow: hidden; }
+#tool-modal .modal { max-height: 90vh; max-height: 90dvh; overflow-y: auto; }
+#tool-modal .modal:has(.local-tool) { width: min(960px, 95vw); max-width: 960px; }
+#tool-modal .modal-close { position: sticky; top: 0; right: 0; float: right; z-index: 2; background: var(--bg-1); margin-left: .5rem; }
+.tool-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.local-tool h3 { margin-bottom: .6rem; padding-right: 2rem; }
+.utility-hint { color: var(--text-2); font-size: .82rem; margin: .6rem 0 1.2rem; overflow-wrap: anywhere; }
+.utility-panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+.utility-panels label, .utility-fields label, .utility-field { min-width: 0; display: block; font-size: .9rem; }
+.utility-panels textarea { width: 100%; min-height: 200px; margin-top: .5rem; }
+.utility-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; }
+.utility-fields label { flex: 1 1 160px; }
+.utility-field { margin-top: 1rem; }
+.local-tool select, .utility-fields input, .utility-field input { display: block; width: 100%; margin-top: .5rem; }
+.local-tool select { padding: .65rem; background: var(--bg-2); color: var(--text-1); border: 1px solid var(--border); border-radius: 8px; }
+.local-tool textarea[readonly] { background: rgba(255,255,255,.025); }
+.local-tool input[type="datetime-local"] { color-scheme: dark; }
+.local-tool input[type="range"] { accent-color: var(--accent); min-height: 32px; }
+.utility-actions, .utility-options { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; margin: 1rem 0; }
+.utility-options label { display: flex; gap: .4rem; align-items: center; color: var(--text-2); font-size: .85rem; }
+.utility-options input { accent-color: var(--accent); }
+.utility-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .5rem; margin: 1rem 0; }
+.utility-stats div { padding: .7rem .5rem; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; text-align: center; }
+.utility-stats dt { font-size: .75rem; color: var(--text-2); }
+.utility-stats dd { font-family: var(--font-mono); font-size: 1.2rem; margin: .35rem 0 0; overflow-wrap: anywhere; }
+.utility-status { min-height: 1.5em; font-size: .85rem; color: var(--text-2); overflow-wrap: anywhere; }
+.utility-status.is-error { color: var(--danger, #ff4d6d); }
+.local-tool .btn:disabled { opacity: .45; cursor: not-allowed; }
+.local-tool [hidden] { display: none; }
+.image-drop { display: flex; flex-direction: column; align-items: center; gap: .6rem; padding: 1.5rem; border: 1px dashed var(--accent); border-radius: 8px; cursor: pointer; background: rgba(108,99,255,.05); text-align: center; }
+.image-drop span { font-size: .8rem; color: var(--text-2); }
+.image-drop input { width: 100%; max-width: 300px; font-size: .85rem; }
+.image-drop.is-dragging { background: rgba(108,99,255,.2); }
+.image-settings { margin-top: 1rem; }
+.image-previews figure { min-width: 0; margin: 0; }
+.image-previews figcaption { font-size: .9rem; margin-bottom: .7rem; }
+.image-previews figcaption span { display: block; color: var(--text-2); font-size: .8rem; margin-top: .35rem; }
+.image-previews img { display: block; width: 100%; height: 220px; object-fit: contain; border: 1px solid var(--border); border-radius: 8px; background-color: #21212b; background-image: conic-gradient(#30303a 25%, transparent 0 50%, #30303a 0 75%, transparent 0); background-size: 20px 20px; }
+.diff-output { max-height: 340px; overflow: auto; border-radius: 8px; background: var(--bg-2); }
+.diff-line { display: grid; grid-template-columns: 3.5em 3.5em 1.5em minmax(0, 1fr); font-family: var(--font-mono); font-size: .8rem; padding: .25rem .5rem; min-height: 1.8em; }
+.diff-number { color: var(--text-2); text-align: right; padding-right: .75em; user-select: none; }
+.diff-sign { user-select: none; }
+.diff-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.diff-added { background: rgba(46,204,113,.12); }
+.diff-added .diff-sign { color: #77e9a7; }
+.diff-removed { background: rgba(255,77,109,.12); }
+.diff-removed .diff-sign { color: #ff879d; }
+@media (max-width: 640px) {
+    #tool-modal .modal { padding: 1rem; width: 95vw; }
+    .utility-panels { grid-template-columns: minmax(0, 1fr); }
+    .utility-panels textarea { min-height: 150px; }
+    .utility-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .utility-fields { align-items: stretch; }
+    .utility-actions .btn { white-space: normal; }
+}

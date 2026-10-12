@@ -1,13 +1,16 @@
 """Cached scraper feeds, plus AI-categorised variants."""
 import json
 import os
+from datetime import datetime
+from typing import Literal
 from urllib.parse import quote_plus
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
 from core.deps import require_admin
 from scrapers import google_scholar, tophub
-from services import classify_service, feed_service
+from scrapers.conference_catalog import ConferenceVenue, conference_catalog
+from services import classify_service, conference_service, feed_service
 
 router = APIRouter(prefix="/feeds", tags=["feeds"])
 
@@ -77,6 +80,23 @@ async def papers_classified(period: str = Query("daily", pattern=PAPER_PERIOD_PA
     data = payload.get("data") if isinstance(payload, dict) else {}
     hf = data.get("hf", []) if isinstance(data, dict) else []
     return await classify_service.classify("papers", hf, period)
+
+
+@router.get('/papers/conferences/catalog', summary='Supported conferences and their calendar years')
+def conference_metadata():
+    return {'conferences': conference_catalog()}
+
+
+@router.get('/papers/conferences', summary='Accepted top conference papers by research area')
+async def conference_papers(
+    venue: ConferenceVenue = ConferenceVenue.all,
+    year: int = Query(datetime.now().year - 1, ge=2020, le=datetime.now().year),
+    area: Literal['all', 'llm', 'vision', 'rl', 'robotics', 'generative', 'graph', 'security', 'science', 'theory', 'other'] = 'all',
+    q: str = Query('', max_length=100),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(60, ge=1, le=120),
+):
+    return await conference_service.get_papers(venue.value, year, area, q, offset, limit)
 
 
 @router.get("/focus")

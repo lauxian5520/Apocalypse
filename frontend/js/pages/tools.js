@@ -38,7 +38,26 @@
     <button class="btn btn-sm" id="pwd-copy">复制</button>
   </div>`
       },
-      { icon: '🌐', name: '在线翻译', desc: '快速文本翻译', url: 'https://translate.google.com' },
+      { icon: '🌐', name: '实时翻译', desc: '大语言模型站内多语言翻译', modal: `
+  <h3 id="translation-title">实时翻译</h3>
+  <p class="translation-hint">AI实时翻译 · 登录后使用 · 支持 Ctrl / ⌘ + Enter</p>
+  <form id="translation-form">
+    <div class="translation-languages">
+      <label>源语言<select id="translation-source"><option value="auto">自动检测</option></select></label>
+      <button type="button" class="btn btn-sm" id="translation-swap" aria-label="交换语言">⇄</button>
+      <label>目标语言<select id="translation-target"></select></label>
+    </div>
+    <div class="translation-panels">
+      <label>原文<textarea id="translation-input" class="textarea" rows="9" maxlength="4000" placeholder="输入需要翻译的文本…" required></textarea></label>
+      <label>译文<textarea id="translation-output" class="textarea" rows="9" placeholder="译文将在这里显示" readonly></textarea></label>
+    </div>
+    <div class="translation-actions">
+      <span id="translation-count">0 / 4000</span>
+      <button type="button" class="btn btn-sm" id="translation-copy" disabled>复制译文</button>
+      <button type="submit" class="btn btn-primary" id="translation-submit">翻译</button>
+    </div>
+    <p id="translation-status" role="status" aria-live="polite"></p>
+  </form>` },
       {
           icon: '📊', name: 'JSON 格式化', desc: '美化 JSON 数据', modal: `
   <h3 style="margin-bottom:1rem">JSON 格式化</h3>
@@ -46,6 +65,7 @@
   <button class="btn btn-primary btn-sm" onclick="try{document.getElementById('json-out').textContent=JSON.stringify(JSON.parse(document.getElementById('json-in').value),null,2)}catch(e){document.getElementById('json-out').textContent='错误: '+e.message}" style="margin:.5rem 0">格式化</button>
   <pre id="json-out" style="font-family:var(--font-mono);font-size:0.8rem;max-height:200px;overflow-y:auto;background:rgba(255,255,255,0.03);padding:.75rem;border-radius:8px"></pre>`
       },
+      ...LocalTools.tools,
       { icon: '✉️', name: '联系作者', desc: '查看作者联系方式', url: 'space.html' },
   ];
 
@@ -53,10 +73,21 @@
   const modal = document.getElementById('tool-modal');
   const modalClose = document.getElementById('modal-close');
   const modalContent = document.getElementById('modal-content');
+  let disposeModal = () => {};
+  let modalOpener = null;
+
+  function closeToolModal() {
+      disposeModal();
+      disposeModal = () => {};
+      modal.classList.remove('active');
+      modalContent.replaceChildren();
+      document.body.classList.remove('tool-modal-open');
+      if (modalOpener?.isConnected) modalOpener.focus();
+  }
 
   function renderTools(tools) {
       grid.innerHTML = tools.map((t, i) => `
-  <div class="card tool-card" data-i="${i}">
+  <div class="card tool-card" data-i="${i}" role="button" tabindex="0">
     <div class="tool-icon">${t.icon}</div>
     <div class="tool-name">${t.name}</div>
     <div class="tool-desc">${t.desc}</div>
@@ -68,12 +99,25 @@
               const t = tools[+card.dataset.i];
               if (t.url) { window.open(t.url, '_blank'); return; }
               if (t.action) { t.action(); return; }
-              if (t.modal) { modalContent.innerHTML = t.modal; modal.classList.add('active'); initModalTools(); }
+              if (t.modal) {
+                  closeToolModal();
+                  modalOpener = card;
+                  modalContent.innerHTML = t.modal;
+                  modal.classList.add('active');
+                  document.body.classList.add('tool-modal-open');
+                  disposeModal = initModalTools(t);
+                  modalClose.focus();
+              }
+          });
+          card.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.click(); }
           });
       });
   }
 
-  function initModalTools() {
+  function initModalTools(tool) {
+      const disposeLocal = LocalTools.init(tool.id, modalContent);
+      initTranslation();
       const mdIn = document.getElementById('md-in');
       if (mdIn) {
           mdIn.addEventListener('input', () => {
@@ -149,10 +193,79 @@
               toast('已复制！', 'success');
           });
       }
+      return () => { disposeLocal(); clearInterval(timerInterval); };
   }
 
-  modalClose.addEventListener('click', () => modal.classList.remove('active'));
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+  function initTranslation() {
+      const form = document.getElementById('translation-form');
+      if (!form) return;
+      const languages = { zh: '简体中文', en: '英语', ja: '日语', ko: '韩语', fr: '法语', de: '德语', es: '西班牙语', ru: '俄语' };
+      const source = document.getElementById('translation-source');
+      const target = document.getElementById('translation-target');
+      const input = document.getElementById('translation-input');
+      const output = document.getElementById('translation-output');
+      const submit = document.getElementById('translation-submit');
+      const copy = document.getElementById('translation-copy');
+      const swap = document.getElementById('translation-swap');
+      const status = document.getElementById('translation-status');
+      for (const [value, name] of Object.entries(languages)) {
+          source.add(new Option(name, value));
+          target.add(new Option(name, value));
+      }
+      target.value = 'zh';
+      const count = document.getElementById('translation-count');
+      const updateCount = () => { count.textContent = `${input.value.length} / 4000`; };
+      input.addEventListener('input', updateCount);
+      swap.addEventListener('click', () => {
+          if (source.value === 'auto') { status.textContent = '请先选择源语言，再交换语言。'; return; }
+          const original = source.value;
+          source.value = target.value;
+          target.value = original;
+          if (output.value) { input.value = output.value; output.value = ''; copy.disabled = true; updateCount(); }
+      });
+      copy.addEventListener('click', async () => {
+          try { await navigator.clipboard.writeText(output.value); status.textContent = '译文已复制。'; }
+          catch (_) { status.textContent = '无法自动复制，请选择译文手动复制。'; }
+      });
+      input.addEventListener('keydown', (e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (!submit.disabled) form.requestSubmit(); }
+      });
+      form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          if (!input.value.trim()) { status.textContent = '请输入需要翻译的文本。'; return; }
+          if (!Auth.token()) { status.textContent = '请先登录后使用翻译。'; return; }
+          submit.disabled = swap.disabled = source.disabled = target.disabled = input.readOnly = true;
+          copy.disabled = true;
+          output.value = '';
+          submit.textContent = '翻译中…';
+          status.textContent = '大语言模型正在翻译，请稍候…';
+          try {
+              const result = await apiFetch('/ai/translate', { method: 'POST', body: JSON.stringify({
+                  text: input.value, source_language: source.value, target_language: target.value,
+              }) });
+              output.value = result.translation;
+              copy.disabled = !output.value;
+              status.textContent = '翻译完成。';
+          } catch (err) { status.textContent = `翻译失败：${err.message}`; }
+          finally {
+              submit.disabled = swap.disabled = source.disabled = target.disabled = input.readOnly = false;
+              submit.textContent = '翻译';
+          }
+      });
+  }
+
+  modalClose.addEventListener('click', closeToolModal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeToolModal(); });
+  document.addEventListener('keydown', (e) => {
+      if (!modal.classList.contains('active')) return;
+      if (e.key === 'Escape') closeToolModal();
+      if (e.key === 'Tab') {
+          const focusable = Array.from(modal.querySelectorAll('button, input, textarea, select, a[href]')).filter(el => !el.disabled && el.getClientRects().length);
+          const first = focusable[0], last = focusable[focusable.length - 1];
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+  });
 
   document.getElementById('tools-search').addEventListener('input', function () {
       const q = this.value.toLowerCase();

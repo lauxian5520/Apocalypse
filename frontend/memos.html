@@ -45,8 +45,21 @@
         <div id="compose-area"></div>
 
         <!-- Memos list -->
-        <label for="memo-filter">查看笔记</label>
-        <select id="memo-filter" class="input"><option value="public">公开</option><option value="private">私密（作者和管理员可见，需登录）</option></select>
+        <div class="memo-toolbar">
+            <div class="memo-visibility-filter">
+                <label for="memo-filter">查看笔记</label>
+                <select id="memo-filter" class="input"><option value="public">公开</option><option value="private">私密（作者和管理员可见，需登录）</option></select>
+            </div>
+            <form id="memo-search-form" class="memo-search-form" role="search" aria-label="搜索笔记">
+                <label class="memo-search-field" for="memo-search">
+                    <span>关键词搜索</span>
+                    <span class="memo-search-input"><input id="memo-search" class="input" type="search" placeholder="搜索笔记内容…" maxlength="200" autocomplete="off"></span>
+                </label>
+                <button class="btn btn-primary btn-sm" type="submit">搜索</button>
+                <button id="memo-search-clear" class="btn btn-sm" type="button" disabled>清空</button>
+            </form>
+        </div>
+        <p id="memo-search-status" role="status" aria-live="polite"></p>
         <div id="memos-list"></div>
         <button class="btn" id="load-more-btn">加载更多…</button>
     </main>

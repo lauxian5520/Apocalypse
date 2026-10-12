@@ -3,10 +3,13 @@
    Uses escHtml / formatTime / makeSkeleton from js/core/utils.js.
 ═══════════════════════════════════════════════════════════════ */
 
-let page = 1, totalPages = 1, isLoading = false;
+let page = 0, totalPages = 0, isLoading = false;
 let selectedImages = [];
 let currentVisibility = "public";
 let memoLoadGeneration = 0;
+let currentKeyword = '';
+let memoSearchTimer = null;
+let memoSearchComposing = false;
 let locatingInProgress = false;
 let locationEnabled = false;
 
@@ -192,29 +195,59 @@ function renderMemoCard(memo) {
 // ── Load memos ────────────────────────────────────────────────────
 async function loadMemos(reset = false) {
     if (isLoading && !reset) return;
+    if (reset) clearTimeout(memoSearchTimer);
     const generation = ++memoLoadGeneration;
+    const requestedPage = reset ? 1 : page + 1;
+    const list = document.getElementById('memos-list');
+    const loadMore = document.getElementById('load-more-btn');
+    const status = document.getElementById('memo-search-status');
     isLoading = true;
-    if (reset) { page = 1; document.getElementById('memos-list').innerHTML = makeSkeleton(4, '160px'); }
+    loadMore.disabled = true;
+    status.classList.remove('is-error');
+    status.textContent = currentKeyword ? '正在搜索笔记…' : '正在加载笔记…';
+    if (reset) { page = 0; list.innerHTML = makeSkeleton(4, '160px'); loadMore.style.display = 'none'; }
 
     try {
-        const data = await apiFetch(`/memos?page=${page}&page_size=10&visibility=${currentVisibility}`);
+        const params = new URLSearchParams({ page: requestedPage, page_size: 10, visibility: currentVisibility });
+        if (currentKeyword) params.set('q', currentKeyword);
+        const data = await apiFetch(`/memos?${params}`);
         if (generation !== memoLoadGeneration) return;
-        const list = document.getElementById('memos-list');
+        page = requestedPage;
+        totalPages = Math.ceil(data.total / 10);
+        status.textContent = currentKeyword ? `共找到 ${data.total} 条匹配笔记` : `共 ${data.total} 条笔记`;
         if (reset) list.innerHTML = '';
         if (data.items.length === 0 && reset) {
-            list.innerHTML = '<div class="empty-state">暂无帖子，来发第一条吧！</div>';
-            document.getElementById('load-more-btn').style.display = 'none';
+            list.innerHTML = currentKeyword
+                ? '<div class="empty-state">没有找到匹配的笔记，请尝试其他关键词。</div>'
+                : '<div class="empty-state">暂无帖子，来发第一条吧！</div>';
             return;
         }
         data.items.forEach(m => list.insertAdjacentHTML('beforeend', renderMemoCard(m)));
-        totalPages = Math.ceil(data.total / 10);
-        document.getElementById('load-more-btn').style.display = page < totalPages ? 'block' : 'none';
+        loadMore.style.display = page < totalPages ? 'block' : 'none';
         bindMemoEvents();
     } catch (e) {
+        if (generation !== memoLoadGeneration) return;
+        if (reset) list.innerHTML = '<div class="empty-state">笔记加载失败，请重试。</div>';
+        status.textContent = '加载失败，请重新搜索或重试加载。';
+        status.classList.add('is-error');
         toast('加载失败: ' + e.message, 'error');
     } finally {
-        if (generation === memoLoadGeneration) isLoading = false;
+        if (generation === memoLoadGeneration) { isLoading = false; loadMore.disabled = false; }
     }
+}
+
+function searchMemos(immediate = false) {
+    clearTimeout(memoSearchTimer);
+    currentKeyword = document.getElementById('memo-search').value.trim();
+    document.getElementById('memo-search-clear').disabled = !document.getElementById('memo-search').value;
+    // Invalidate a previous response as soon as the query changes, including the debounce window.
+    ++memoLoadGeneration;
+    document.getElementById('load-more-btn').style.display = 'none';
+    const status = document.getElementById('memo-search-status');
+    status.classList.remove('is-error');
+    status.textContent = currentKeyword ? '正在搜索笔记…' : '正在加载笔记…';
+    if (immediate) loadMemos(true);
+    else memoSearchTimer = setTimeout(() => loadMemos(true), 300);
 }
 
 // ── Post new memo ─────────────────────────────────────────────────
@@ -366,8 +399,8 @@ function bindMemoEvents() {
             if (!confirm('删除此帖子？')) return;
             try {
                 await apiFetch('/memos/' + this.dataset.mid, { method: 'DELETE' });
-                this.closest('.memo-card').remove();
                 toast('已删除', 'success');
+                await loadMemos(true);
             } catch (err) { toast(err.message, 'error'); }
         };
     });
@@ -408,8 +441,16 @@ function bindMemoEvents() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     await Auth.init();
+    currentKeyword = document.getElementById('memo-search').value.trim();
+    document.getElementById('memo-search-clear').disabled = !document.getElementById('memo-search').value;
     loadMemos(true);
-    document.getElementById('load-more-btn')?.addEventListener('click', () => { page++; loadMemos(); });
+    document.getElementById('load-more-btn')?.addEventListener('click', () => loadMemos());
+    const searchInput = document.getElementById('memo-search');
+    searchInput.addEventListener('input', e => { if (!e.isComposing && !memoSearchComposing) searchMemos(); });
+    searchInput.addEventListener('compositionstart', () => { memoSearchComposing = true; clearTimeout(memoSearchTimer); });
+    searchInput.addEventListener('compositionend', () => { memoSearchComposing = false; searchMemos(); });
+    document.getElementById('memo-search-form').addEventListener('submit', e => { e.preventDefault(); if (!memoSearchComposing) searchMemos(true); });
+    document.getElementById('memo-search-clear').addEventListener('click', () => { searchInput.value = ''; searchMemos(true); searchInput.focus(); });
 
     // Compose form is injected by memos.html after this file runs, so use delegation.
     document.addEventListener('submit', (e) => {

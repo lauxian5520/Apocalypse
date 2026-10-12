@@ -48,14 +48,14 @@
 
 ## ✨ 功能特性
 
-- **📝 社交笔记** — 发帖（Markdown + 多图）、评论、匿名发布、AI 解释；公开/私密切换，私密正文、评论和附件仅作者与管理员可见
+- **📝 社交笔记** — 发帖（Markdown + 多图）、评论、匿名发布、AI 解释；支持按正文关键词搜索、匹配数量和分页，搜索沿用公开/私密筛选；私密正文、评论和附件仅作者与管理员可见
 - **🤖 AI 助手「天启」** — 3D 精灵对话（SSE 流式）、页面总结、内容解释（DeepSeek / 智谱 / Gemini / OpenAI / Ollama / 自定义）
 - **🧩 Harness 智能体工作台** — 会话式 Agent：工具调用、人工审批、沙箱工作区、全链路事件日志、轨迹检查器、Token 计费、上下文压缩、会话 fork/replay、可拖拽分栏（详见下方专节）
 - **🧪 深研场（Agentic RL）** — 建在 Harness 之上的 Deep Research 强化学习环境：任务集、验证器、rollout 引擎、loss mask、GRPO（详见[下方专节](#-深研场deep-research-的-agentic-rl-环境)与 [rl/README.md](rl/README.md)）
 - **⚡ 热门项目** — GitHub Trending + HuggingFace 模型（每日/每周/每月）
-- **📄 前沿论文** — HuggingFace Daily Papers + arXiv
+- **📄 前沿论文** — HuggingFace Daily Papers + arXiv，以及 ICLR、ICML、NeurIPS（NIPS）、AAAI、IJCAI、CVPR、ICCV、ECCV、ACL、EMNLP、NAACL、AISTATS、UAI、COLT、CoRL 官方论文目录；支持会议、年份、研究领域与标题/作者搜索，ICCV / ECCV 自动匹配举办年份。会议来源通过统一目录注册，新增会议后前端自动生成选项。领域按标题、官方主题与关键词归类，跨领域论文可出现在多个分类。
 - **🔥 焦点新闻** — 多平台热点聚合
-- **🛠 工具箱** — Markdown 编辑器、颜色工具、番茄钟、密码生成器等
+- **🛠 工具箱** — Markdown 编辑器、颜色工具、番茄钟、密码生成器、JSON 格式化；新增文本处理与统计、时间戳转换、UTF-8 Base64 / URL 编解码、图片压缩与格式转换（JPEG / PNG / WebP，单文件最多 20 MB）、文本差异对比（每侧最多 500 行），五项新工具无需登录，仅在浏览器内处理，关闭后不保存输入。大语言模型站内多语言翻译登录后使用，每次最多 4000 字符；当前使用 DeepSeek 的 `DEEPSEEK_API_KEY` / `DEEPSEEK_API_URL` / `DEEPSEEK_MODEL`，独立于默认 AI Provider。
 - **🎵 背景音乐** — 管理员上传/管理，全局悬浮播放器
 - **💬 私聊** — 用户间一对一消息，支持图片/文件附件
 - **🔐 用户系统** — Cookie 会话、头像上传、后台用户管理；生产默认关闭公开注册，通过管理员 CLI 创建受邀账号

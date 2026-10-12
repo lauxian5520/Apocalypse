@@ -6,7 +6,7 @@ from core.deps import require_user
 from core.errors import AppError, ValidationError
 from core.sse import SSE_DONE, SSE_HEADERS, sse
 from models.user import User
-from schemas.ai import ChatIn, ExplainIn, ProviderOut, SummarizeIn
+from schemas.ai import ChatIn, ExplainIn, ProviderOut, SummarizeIn, TranslateIn
 from services import ai_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -61,3 +61,10 @@ async def explain(body: ExplainIn, _: User = Depends(require_user)):
     if not body.content.strip() and not body.image_urls:
         raise ValidationError("内容不能为空")
     return {"explanation": await ai_service.explain_memo(body.content, body.image_urls or None)}
+
+
+@router.post('/translate')
+async def translate(body: TranslateIn, _: User = Depends(require_user)):
+    return {'translation': await ai_service.translate(
+        body.text, body.source_language, body.target_language,
+    )}

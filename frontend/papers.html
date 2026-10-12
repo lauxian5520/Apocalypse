@@ -40,12 +40,26 @@
             <h1 style="font-family:var(--font-display);font-size:2rem;font-weight:700">前沿<span
                     style="background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">论文</span>
             </h1>
-            <p class="section-desc">HuggingFace Daily Papers + ArXiv 热门学术内容</p>
+            <p class="section-desc">HuggingFace · ArXiv · 机器学习、视觉、自然语言处理与机器人顶会论文</p>
         </div>
 
         <div class="source-tabs" id="source-tabs">
             <button class="source-tab active" data-source="hf">🤗 HuggingFace</button>
             <button class="source-tab" data-source="arxiv">🎓 ArXiv 论文</button>
+            <button class="source-tab" data-source="conferences">🏆 顶会论文</button>
+        </div>
+
+        <div id="conference-controls" hidden>
+            <div class="conference-filters">
+                <label>会议<select id="conference-venue">
+                    <option value="all">全部会议</option>
+                </select></label>
+                <label>年份<select id="conference-year"></select></label>
+                <label class="conference-search">搜索论文<input id="conference-query" type="search" maxlength="100" placeholder="标题或作者关键词"></label>
+            </div>
+            <div id="conference-areas" class="conference-areas" aria-label="研究领域"></div>
+            <p class="conference-note">收录会议官方论文目录，按标题、官方主题与关键词归类；跨领域论文可出现在多个分类。默认展示上一年度，可切换年份；ICCV、ECCV 隔年举办，选择会议后自动调整可选年份。</p>
+            <p id="conference-status" class="conference-note" role="status" aria-live="polite"></p>
         </div>
         
         <div class="filters" id="period-tabs" style="margin-bottom: 1.2rem; display: flex;">
@@ -56,6 +70,7 @@
         </div>
 
         <div class="grid-3" id="papers-grid"></div>
+        <button id="conference-more" class="btn" hidden>加载更多论文</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>

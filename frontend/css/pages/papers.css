@@ -10,3 +10,14 @@ body { padding-top: 80px; }
 @media (max-width: 992px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 640px) { .grid-3 { grid-template-columns: 1fr; } }
 .ai-result { margin-top: 1rem; padding: 0.7rem 0.8rem; background: rgba(108,99,255,0.1); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; font-size: 0.86rem; color: var(--text-2); }
+.conference-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin: 1rem 0; }
+.conference-filters label { display: flex; flex-direction: column; gap: .4rem; font-size: .85rem; color: var(--text-2); }
+.conference-filters select, .conference-filters input { min-height: 42px; padding: .6rem .8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-2, #181828); color: var(--text-1); }
+.conference-search { flex: 1; min-width: 180px; }
+.conference-areas { display: flex; flex-wrap: wrap; gap: .5rem; }
+.conference-areas button { cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid var(--border); color: var(--text-2); }
+.conference-areas button.tag-active { background: rgba(108,99,255,.18); border-color: var(--accent); color: var(--accent); }
+.conference-note { color: var(--text-2); font-size: .82rem; line-height: 1.7; margin-top: .8rem; }
+.conference-heading { margin: 1.6rem 0 .6rem; font-size: 1.1rem; color: var(--text-1); }
+#conference-more { display: block; margin: 1.5rem auto 0; }
+[hidden], #conference-more[hidden] { display: none !important; }

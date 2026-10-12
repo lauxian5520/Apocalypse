@@ -27,10 +27,11 @@ def list_memos(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     visibility: Literal["public", "private"] = Query("public"),
+    q: str = Query("", max_length=200),
     viewer: User | None = Depends(optional_user),
     db: Session = Depends(get_db),
 ):
-    total, memos = memo_service.list_memos(db, visibility=visibility, page=page, page_size=page_size, viewer=viewer)
+    total, memos = memo_service.list_memos(db, visibility=visibility, page=page, page_size=page_size, viewer=viewer, q=q)
     return Page[MemoOut](
         total=total,
         page=page,
