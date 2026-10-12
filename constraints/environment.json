@@ -1,0 +1,16 @@
+{
+  "purpose": "delivery environment snapshot; not a historical training environment assertion",
+  "python": "3.12.14",
+  "platform": "Linux-6.12.0-124.55.1.el10_1.x86_64-x86_64-with-glibc2.39",
+  "torch_cuda_build": "13.0",
+  "libraries": {
+    "torch": "2.13.0",
+    "vllm": "0.29.0",
+    "transformers": "5.17.0",
+    "peft": "0.21.0",
+    "accelerate": "1.15.0",
+    "tokenizers": "0.23.2",
+    "fastapi": "0.136.3",
+    "playwright": "1.63.0"
+  }
+}

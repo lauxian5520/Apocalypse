@@ -4,6 +4,7 @@ The HTTP layer only frames what the agent loop produces. Turn logic lives in
 `harness/loop/agent.py`, which has no idea this file exists.
 """
 import io
+import asyncio
 import logging
 import os
 import zipfile
@@ -12,7 +13,6 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
-from starlette.background import BackgroundTask
 
 from core.config import get_settings
 from core.deps import require_user
@@ -43,6 +43,7 @@ settings = get_settings()
 
 MAX_MESSAGE_CHARS = 20000
 MAX_WORKSPACE_LISTING = 200
+_turn_tasks: dict[str, asyncio.Task] = {}
 
 
 def require_harness_user(user: User = Depends(require_user)) -> User:
@@ -89,7 +90,10 @@ def get_session(session_id: str, user: User = Depends(require_harness_user)):
 
 
 @router.delete("/sessions/{session_id}", status_code=204)
-def delete_session(session_id: str, user: User = Depends(require_harness_user)):
+async def delete_session(session_id: str, user: User = Depends(require_harness_user)):
+    manager.get_owned(session_id, user.id)
+    if session_id in _turn_tasks or manager.is_busy(session_id):
+        raise ValidationError("会话正在运行，请先中断并等待任务结束")
     manager.delete(session_id, user.id)
 
 
@@ -148,13 +152,16 @@ async def send_message(
         raise ValidationError("消息不能为空")
     if len(text) > MAX_MESSAGE_CHARS:
         raise ValidationError(f"消息过长，请控制在 {MAX_MESSAGE_CHARS} 字以内")
-    if manager.is_busy(session_id):
+    if session_id in _turn_tasks or manager.is_busy(session_id):
         raise ValidationError("该会话正在运行，请先等待或中断当前任务")
 
     hctx = build_context(session_id, row.preset)
-    if not row.title:
-        await _title_session(hctx, text)
-    return _stream(session_id, run_turn(hctx, text))
+    async def turn_events():
+        if not row.title:
+            await _title_session(hctx, text)
+        async for event in run_turn(hctx, text):
+            yield event
+    return _stream(session_id, turn_events())
 
 
 @router.post("/sessions/{session_id}/approvals/{call_id}")
@@ -162,7 +169,7 @@ async def resolve_approval(
     session_id: str, call_id: str, body: ApprovalIn, user: User = Depends(require_harness_user)
 ):
     row = manager.get_owned(session_id, user.id)
-    if manager.is_busy(session_id):
+    if session_id in _turn_tasks or manager.is_busy(session_id):
         raise ValidationError("该会话正在运行，请先等待或中断当前任务")
 
     hctx = build_context(session_id, row.preset)
@@ -177,32 +184,73 @@ def interrupt_session(session_id: str, user: User = Depends(require_harness_user
 
 
 def _stream(session_id: str, events: AsyncIterator) -> StreamingResponse:
-    """Frame an event stream as SSE and keep the session's status honest."""
+    """Keep the producer alive independently of its HTTP subscriber."""
     manager.set_status(session_id, "running")
+    manager.register_turn(session_id)
+    queue = asyncio.Queue(maxsize=256)
+    connected = True
 
-    async def generator():
+    def publish(frame):
+        nonlocal connected
+        if not connected:
+            return
+        if queue.full():
+            # Durable events remain available to a reconnecting client.
+            connected = False
+            while not queue.empty():
+                queue.get_nowait()
+            queue.put_nowait(sse({"error": "连接读取过慢，请刷新查看已保存的进度"}))
+            queue.put_nowait(None)
+            return
+        queue.put_nowait(frame)
+
+    async def produce():
         try:
             async for event in events:
-                yield sse(event.to_dict())
-            yield SSE_DONE
-        except AppError as e:
-            # Headers are already on the wire, so errors travel in-band.
-            yield sse({"error": e.message})
-        except Exception as e:
-            logger.exception("[harness] turn failed for %s", session_id)
-            yield sse({"error": str(e) or e.__class__.__name__})
+                publish(sse(event.to_dict()))
+            publish(SSE_DONE)
+        except AppError as exc:
+            publish(sse({"error": exc.message}))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("harness_turn_failed session=%s error=%s", session_id, type(exc).__name__)
+            publish(sse({"error": "Agent 执行失败，请查看会话状态"}))
+        finally:
+            try:
+                await events.aclose()
+            finally:
+                try:
+                    _finish_turn(session_id)
+                finally:
+                    manager.release_turn(session_id)
+                    _turn_tasks.pop(session_id, None)
+                    publish(None)
 
-    # Cleanup lives in a background task, not in the generator's `finally`: a
-    # client that closes its tab leaves the generator suspended, and Python
-    # runs its `finally` only when the loop eventually finalizes it. Starlette
-    # awaits this after the response ends either way, so the status settles and
-    # the session never gets stuck in "running".
-    return StreamingResponse(
-        generator(),
-        media_type="text/event-stream",
-        headers=SSE_HEADERS,
-        background=BackgroundTask(_finish_turn, session_id),
-    )
+    _turn_tasks[session_id] = asyncio.create_task(produce())
+
+    async def generator():
+        nonlocal connected
+        try:
+            while True:
+                frame = await queue.get()
+                if frame is None:
+                    break
+                yield frame
+        finally:
+            connected = False
+            while not queue.empty():
+                queue.get_nowait()
+
+    return StreamingResponse(generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+
+async def stop_turns():
+    tasks = list(_turn_tasks.values())
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def _finish_turn(session_id: str) -> None:
@@ -212,12 +260,14 @@ def _finish_turn(session_id: str) -> None:
 
 async def _title_session(hctx, seed: str) -> None:
     """Best-effort: a missing title never fails a turn."""
+    if not settings.harness_auto_title:
+        return
     try:
         title = await generate_title(hctx.llm, seed)
         if title:
             manager.set_title(hctx.session_id, title)
     except Exception as e:
-        logger.info("[harness] auto-title skipped for %s: %s", hctx.session_id, e)
+        logger.info("[harness] auto-title skipped session=%s error=%s", hctx.session_id, type(e).__name__)
 
 
 # ── workspace ────────────────────────────────────────────────────

@@ -1,0 +1,343 @@
+{
+  "historical_training_revision": null,
+  "historical_revision_note": "历史运行未绑定可核验提交；当前打包提交不是训练提交。",
+  "packaging_base_revision": "e968f5613140c1881bcf2af45fe5a3a67fdb7498",
+  "packaging_worktree_dirty": true,
+  "historical_generation": {
+    "temperature": 0,
+    "top_p": 0.95,
+    "max_tokens": 1024,
+    "max_steps": 12,
+    "context_limit": 16384,
+    "provenance": "historical comparison reports; no original run receipts"
+  },
+  "historical_training_configuration": {
+    "base_model": "Qwen/Qwen3-8B",
+    "sft_steps": 710,
+    "grpo_steps": 500,
+    "sft_tokenized_examples": 1419,
+    "training_split_tasks": 1908,
+    "hardware_from_logs": "NVIDIA GeForce RTX 4090; torch 2.13.0+cu130",
+    "adapter_configuration": "adapter_config.json included for each adapter",
+    "full_optimizer_and_launch_configuration": null,
+    "limitation": "Original launch receipts unavailable; current defaults must not be treated as historical hyperparameters."
+  },
+  "environment_stamps": {
+    "rl/data/eval/hotpotqa-qwen3-8b-sft/base.jsonl": [
+      {
+        "corpus_docs": 66581,
+        "corpus_sha256": "3948151a67ec5f21baa3c2a00bd15c2397cbe0cbf98b951d8908bb6d06b63e89",
+        "max_steps": 12,
+        "model": "Qwen/Qwen3-8B",
+        "preset": "deepresearch",
+        "prompt_sha256": "acd41030ea96d961ea360dfee48a20399d2cbd59adff38f611b54f9d0a596e90",
+        "template_sha256": "709357c617f11bebcf7d6fd1e69ecbef55c17f29ac77e699c3b633be49d42784"
+      }
+    ],
+    "rl/data/eval/hotpotqa-qwen3-8b-sft/sft.jsonl": [
+      {
+        "corpus_docs": 66581,
+        "corpus_sha256": "3948151a67ec5f21baa3c2a00bd15c2397cbe0cbf98b951d8908bb6d06b63e89",
+        "max_steps": 12,
+        "model": "sft-eval",
+        "preset": "deepresearch",
+        "prompt_sha256": "acd41030ea96d961ea360dfee48a20399d2cbd59adff38f611b54f9d0a596e90",
+        "template_sha256": "709357c617f11bebcf7d6fd1e69ecbef55c17f29ac77e699c3b633be49d42784"
+      }
+    ],
+    "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps/grpo500.jsonl": [
+      {
+        "corpus_docs": 66581,
+        "corpus_sha256": "3948151a67ec5f21baa3c2a00bd15c2397cbe0cbf98b951d8908bb6d06b63e89",
+        "max_steps": 12,
+        "model": "grpo500-eval",
+        "preset": "deepresearch",
+        "prompt_sha256": "acd41030ea96d961ea360dfee48a20399d2cbd59adff38f611b54f9d0a596e90",
+        "template_sha256": "709357c617f11bebcf7d6fd1e69ecbef55c17f29ac77e699c3b633be49d42784"
+      }
+    ],
+    "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps/grpo75.jsonl": [
+      {
+        "corpus_docs": 66581,
+        "corpus_sha256": "3948151a67ec5f21baa3c2a00bd15c2397cbe0cbf98b951d8908bb6d06b63e89",
+        "max_steps": 12,
+        "model": "grpo75-eval",
+        "preset": "deepresearch",
+        "prompt_sha256": "acd41030ea96d961ea360dfee48a20399d2cbd59adff38f611b54f9d0a596e90",
+        "template_sha256": "709357c617f11bebcf7d6fd1e69ecbef55c17f29ac77e699c3b633be49d42784"
+      }
+    ],
+    "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps-test/sft.jsonl": [
+      {
+        "corpus_docs": 66581,
+        "corpus_sha256": "3948151a67ec5f21baa3c2a00bd15c2397cbe0cbf98b951d8908bb6d06b63e89",
+        "max_steps": 12,
+        "model": "sft-eval",
+        "preset": "deepresearch",
+        "prompt_sha256": "acd41030ea96d961ea360dfee48a20399d2cbd59adff38f611b54f9d0a596e90",
+        "template_sha256": "709357c617f11bebcf7d6fd1e69ecbef55c17f29ac77e699c3b633be49d42784"
+      }
+    ],
+    "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps-test/grpo500.jsonl": [
+      {
+        "corpus_docs": 66581,
+        "corpus_sha256": "3948151a67ec5f21baa3c2a00bd15c2397cbe0cbf98b951d8908bb6d06b63e89",
+        "max_steps": 12,
+        "model": "grpo500-eval",
+        "preset": "deepresearch",
+        "prompt_sha256": "acd41030ea96d961ea360dfee48a20399d2cbd59adff38f611b54f9d0a596e90",
+        "template_sha256": "709357c617f11bebcf7d6fd1e69ecbef55c17f29ac77e699c3b633be49d42784"
+      }
+    ]
+  },
+  "summaries": {
+    "dev/base": {
+      "status": "complete",
+      "completed": 457,
+      "expected": 457,
+      "missing": 0,
+      "valid": 457,
+      "errors": 0,
+      "pass@1": 0.2123,
+      "exact_match": 0.2123,
+      "format_valid": 0.954,
+      "voided": 0.0,
+      "gave_up": 0.046,
+      "valid_only": {
+        "pass@1": 0.2123,
+        "format_valid": 0.954,
+        "mean_f1": 0.422,
+        "mean_tool_calls": 4.79
+      }
+    },
+    "dev/sft": {
+      "status": "complete",
+      "completed": 457,
+      "expected": 457,
+      "missing": 0,
+      "valid": 451,
+      "errors": 6,
+      "pass@1": 0.372,
+      "exact_match": 0.372,
+      "format_valid": 0.8731,
+      "voided": 0.0022,
+      "gave_up": 0.1138,
+      "valid_only": {
+        "pass@1": 0.3769,
+        "format_valid": 0.8847,
+        "mean_f1": 0.6022,
+        "mean_tool_calls": 6.74
+      }
+    },
+    "dev/grpo75": {
+      "status": "complete",
+      "completed": 457,
+      "expected": 457,
+      "missing": 0,
+      "valid": 450,
+      "errors": 7,
+      "pass@1": 0.3873,
+      "exact_match": 0.3873,
+      "format_valid": 0.8534,
+      "voided": 0.0022,
+      "gave_up": 0.1313,
+      "valid_only": {
+        "pass@1": 0.3933,
+        "format_valid": 0.8667,
+        "mean_f1": 0.6116,
+        "mean_tool_calls": 7.2
+      }
+    },
+    "dev/grpo500": {
+      "status": "complete",
+      "completed": 457,
+      "expected": 457,
+      "missing": 0,
+      "valid": 449,
+      "errors": 8,
+      "pass@1": 0.4092,
+      "exact_match": 0.4092,
+      "format_valid": 0.8578,
+      "voided": 0.0022,
+      "gave_up": 0.1247,
+      "valid_only": {
+        "pass@1": 0.4165,
+        "format_valid": 0.8731,
+        "mean_f1": 0.628,
+        "mean_tool_calls": 7.43
+      }
+    },
+    "test/sft": {
+      "status": "complete",
+      "completed": 459,
+      "expected": 459,
+      "missing": 0,
+      "valid": 457,
+      "errors": 2,
+      "pass@1": 0.3529,
+      "exact_match": 0.3529,
+      "format_valid": 0.8824,
+      "voided": 0.0,
+      "gave_up": 0.1133,
+      "valid_only": {
+        "pass@1": 0.3545,
+        "format_valid": 0.8862,
+        "mean_f1": 0.5921,
+        "mean_tool_calls": 6.79
+      }
+    },
+    "test/grpo500": {
+      "status": "complete",
+      "completed": 459,
+      "expected": 459,
+      "missing": 0,
+      "valid": 453,
+      "errors": 6,
+      "pass@1": 0.4139,
+      "exact_match": 0.4139,
+      "format_valid": 0.8562,
+      "voided": 0.0,
+      "gave_up": 0.1307,
+      "valid_only": {
+        "pass@1": 0.4194,
+        "format_valid": 0.8675,
+        "mean_f1": 0.6252,
+        "mean_tool_calls": 7.19
+      }
+    }
+  },
+  "files": {
+    "constraints/environment.json": {
+      "bytes": 454,
+      "sha256": "4bac0501743316eae2e468b5648e221fc6ebc84c3ae1b4157be448b6b14d5cc1"
+    },
+    "constraints/rl-cpu-py312.txt": {
+      "bytes": 799,
+      "sha256": "1f512faa049b4d671453e94fb8fc7a8842d61f342bf2237221c1f3c6b8799d1c"
+    },
+    "constraints/rl-gpu-py312.txt": {
+      "bytes": 4300,
+      "sha256": "667ae8e68d1d62a2061100d03d1510192a6b0eabb5682adf1136c24fe8b632fe"
+    },
+    "constraints/rl-inputs.json": {
+      "bytes": 432,
+      "sha256": "1c433b1834a8951309fa1676a0d87488bbaec66975aa79a60e2f750832753e08"
+    },
+    "constraints/web-py312.txt": {
+      "bytes": 1129,
+      "sha256": "afa00ff29192e42b7e06b84c30908c2c6b1064e877b61bed3475442c4c73d4cc"
+    },
+    "rl/data/adapters/grpo-qwen3-12steps/policy-step-000500/README.md": {
+      "bytes": 5180,
+      "sha256": "01a98f7bdd529421030ef1e6ba80e1a301f35b9278985b45b086f69e0fd3d6e1"
+    },
+    "rl/data/adapters/grpo-qwen3-12steps/policy-step-000500/adapter_config.json": {
+      "bytes": 1168,
+      "sha256": "b1a095496fc0d93e1fdf9d9c7fdfd77d3c531801b6300e0e7efd3f0be7046c88"
+    },
+    "rl/data/adapters/grpo-qwen3-12steps/policy-step-000500/adapter_model.safetensors": {
+      "bytes": 349243752,
+      "sha256": "58d0982e9cf9ea612a0183d75b6f3738be66f559695f11a23763dcd9b18f5986"
+    },
+    "rl/data/adapters/grpo-qwen3-12steps/policy-step-000500/chat_template.jinja": {
+      "bytes": 2464,
+      "sha256": "709357c617f11bebcf7d6fd1e69ecbef55c17f29ac77e699c3b633be49d42784"
+    },
+    "rl/data/adapters/grpo-qwen3-12steps/policy-step-000500/tokenizer.json": {
+      "bytes": 11422650,
+      "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506"
+    },
+    "rl/data/adapters/grpo-qwen3-12steps/policy-step-000500/tokenizer_config.json": {
+      "bytes": 693,
+      "sha256": "c4f4c62b741ab2940841480f9942f378d7d3878d47c2babb862af7381c59b952"
+    },
+    "rl/data/adapters/sft-qwen3/README.md": {
+      "bytes": 5180,
+      "sha256": "01a98f7bdd529421030ef1e6ba80e1a301f35b9278985b45b086f69e0fd3d6e1"
+    },
+    "rl/data/adapters/sft-qwen3/adapter_config.json": {
+      "bytes": 1168,
+      "sha256": "5904d622c35a1ccab262cac6058bec19e2a498d1389ec8a51b9c0cba7c4bf448"
+    },
+    "rl/data/adapters/sft-qwen3/adapter_model.safetensors": {
+      "bytes": 349243752,
+      "sha256": "67ca2134dbfa9ca9c0e2b855439df52f8929deaae8bc19aa613329fbafcb63fc"
+    },
+    "rl/data/adapters/sft-qwen3/chat_template.jinja": {
+      "bytes": 2464,
+      "sha256": "709357c617f11bebcf7d6fd1e69ecbef55c17f29ac77e699c3b633be49d42784"
+    },
+    "rl/data/adapters/sft-qwen3/tokenizer.json": {
+      "bytes": 11422650,
+      "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506"
+    },
+    "rl/data/adapters/sft-qwen3/tokenizer_config.json": {
+      "bytes": 693,
+      "sha256": "c4f4c62b741ab2940841480f9942f378d7d3878d47c2babb862af7381c59b952"
+    },
+    "rl/data/corpus/manifest.json": {
+      "bytes": 387,
+      "sha256": "6af88743cc9a9019d9e4aa1757e6317b2aee88f90c4297772a2a5956d2c05521"
+    },
+    "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps/grpo500.jsonl": {
+      "bytes": 9222183,
+      "sha256": "9f3a210666e15b100444f2a7b781eb58421668ef5e435f4eb39e00ef7be033ed"
+    },
+    "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps/grpo75.jsonl": {
+      "bytes": 8923949,
+      "sha256": "e42bddb4a783663f43c232f420b21f45f3bf8adbb3fe78ed0258e12470d55e34"
+    },
+    "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps-test/grpo500.jsonl": {
+      "bytes": 8898127,
+      "sha256": "a78f15172dd18cf24976d89be43ab9a2fb2859a0a0a27599507d478d86b268ac"
+    },
+    "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps-test/sft.jsonl": {
+      "bytes": 8173703,
+      "sha256": "1ce6ea12e8975219195bb04c4c3b8ba183b048c37e75112476acae504dd6031e"
+    },
+    "rl/data/eval/hotpotqa-qwen3-8b-sft/base.jsonl": {
+      "bytes": 5903005,
+      "sha256": "28af34ce2413e9a8d7f34899c73d72b2e705fe3358d77909deb65f5b1275be9f"
+    },
+    "rl/data/eval/hotpotqa-qwen3-8b-sft/sft.jsonl": {
+      "bytes": 8354571,
+      "sha256": "60d3cdcebf2c008530b2c7543aedf889b20a611ad58a37e8709fdf7afb95c85e"
+    },
+    "rl/data/metrics/grpo-qwen3-12steps-status.json": {
+      "bytes": 976,
+      "sha256": "1f68101619d7a70a0df608d84eef130e6ad3561689b3dd056f925601132224f3"
+    },
+    "rl/data/metrics/grpo-qwen3-12steps.jsonl": {
+      "bytes": 255301,
+      "sha256": "e86f16d5738a6fa2cb417fbeb39e008f039451c6384f872bc0cf2cdb56f37087"
+    },
+    "rl/data/metrics/grpo-qwen3-12steps.log": {
+      "bytes": 305693,
+      "sha256": "a097aa4e04f0190094ac37bccc46dc1694710c5f56b2910df46185232ccf5429"
+    },
+    "rl/data/sft/qwen3-8b-sft-status.json": {
+      "bytes": 416,
+      "sha256": "80ee9c78312ed7b307f4625a3cbe2ac720971362f3e9d23f9987dd35ead271b9"
+    },
+    "rl/data/sft/qwen3-8b-sft-train-active.log": {
+      "bytes": 8126,
+      "sha256": "45848ba18dbfa68a5c2007c2201580fde2c507a78b93562673a4bbb68bb27ad3"
+    },
+    "rl/data/splits/dev.jsonl": {
+      "bytes": 249194,
+      "sha256": "3e4889294e5b705c9afc036f9f5bae31cfc4f3b296b17b386756014c7c6cac6b"
+    },
+    "rl/data/splits/splits.json": {
+      "bytes": 329,
+      "sha256": "68f5fd302d2fae482a8112b08d09527a9e9f1e9f686d123231599a9273fc88a9"
+    },
+    "rl/data/splits/test.jsonl": {
+      "bytes": 251485,
+      "sha256": "c12c6b0b7e7bf2f50cce86df7c20bbc737768851b5f2f870a7c9be8cb73e3a09"
+    },
+    "rl/data/splits/train.jsonl": {
+      "bytes": 1041216,
+      "sha256": "b7b4863cd2049c7b41b147d142e312572ec0a69869007af5788534e4c295921f"
+    }
+  }
+}

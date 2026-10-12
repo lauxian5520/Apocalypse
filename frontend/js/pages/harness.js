@@ -53,13 +53,24 @@
         });
     }
 
+    let creatingSession = null;
     async function newSession() {
-        const session = await apiFetch('/harness/sessions', {
-            method: 'POST',
-            body: JSON.stringify({}),
-        });
-        await loadSessions();
-        await openSession(session.id);
+        if (creatingSession) return creatingSession;
+        dom.newBtn.disabled = true;
+        dom.send.disabled = true;
+        creatingSession = (async () => {
+            const session = await apiFetch('/harness/sessions', {
+                method: 'POST', body: JSON.stringify({}),
+            });
+            await loadSessions();
+            await openSession(session.id);
+        })();
+        try { await creatingSession; }
+        finally {
+            creatingSession = null;
+            dom.newBtn.disabled = false;
+            dom.send.disabled = state.running;
+        }
     }
 
     async function openSession(sessionId) {
@@ -259,6 +270,7 @@
     async function send() {
         const text = dom.input.value.trim();
         if (!text || state.running) return;
+        if (creatingSession) await creatingSession;
         if (!state.sessionId) await newSession();
 
         dom.input.value = '';

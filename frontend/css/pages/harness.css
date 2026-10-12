@@ -555,3 +555,8 @@ body.hs-wide { --hs-output-height: 60vh; }
     .hs-composer { padding-top: .4rem; }
     .hs-composer-actions { margin-top: .3rem; }
 }
+
+/* Running-task controls must remain tappable on narrow screens. */
+@media (max-width: 600px) {
+  #sprite-container, #sprite-clock { display: none !important; }
+}

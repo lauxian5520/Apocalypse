@@ -1,10 +1,13 @@
 """Registration, login, session and avatar endpoints."""
 import os
+import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from core.database import track_file
+from core.config import get_settings
 from core.deps import get_db, require_user
 from core.errors import ValidationError
 from core.security import (
@@ -56,6 +59,8 @@ def get_captcha():
 
 @router.post("/register", status_code=201, response_model=UserOut)
 async def register(request: Request, db: Session = Depends(get_db)):
+    if not get_settings().registration_enabled:
+        raise HTTPException(status_code=403, detail="注册已关闭，请联系管理员创建账号")
     body, avatar = await _read_registration(request)
 
     username = (body.get("username") or "").strip()
@@ -102,11 +107,11 @@ async def register(request: Request, db: Session = Depends(get_db)):
     )
     db.add(user)
     try:
-        db.commit()
-        db.refresh(user)
-    except Exception as e:
+        db.flush()
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"注册失败: {e}")
+        logging.getLogger(__name__).warning("registration_failed")
+        raise HTTPException(status_code=409, detail="注册失败，用户名或邮箱可能已被使用")
 
     if avatar_bytes is not None:
         stored = storage_service.write_bytes(
@@ -119,8 +124,10 @@ async def register(request: Request, db: Session = Depends(get_db)):
             default_ext=".jpg",
         )
         user.avatar_url = stored.url
-        db.commit()
-        db.refresh(user)
+        track_file(db, stored.path)
+
+    db.commit()
+    db.refresh(user)
 
     return user
 
@@ -160,6 +167,7 @@ async def upload_avatar(
 ):
     old_filename = os.path.basename(user.avatar_url or "")
     stored = await storage_service.save_avatar(file, user.id)
+    track_file(db, stored.path)
     user.avatar_url = stored.url
     db.commit()
     # Replacing an avatar used to leave the previous file behind forever.

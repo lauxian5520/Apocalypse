@@ -145,7 +145,7 @@ async function loadUsers() {
           </tr>
         `).join('');
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="7" style="color:#ff8d8d">加载失败: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="color:#ff8d8d">加载失败: ${escHtml(e.message)}</td></tr>`;
     }
 }
 

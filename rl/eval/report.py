@@ -94,12 +94,20 @@ def render(
     tasks_by_id: dict[str, dict],
     stats=None,
     title: str = "评测报告",
+    expected: int | None = None,
 ) -> str:
     ok = [t for t in trajectories if t.ok]
     failed = len(trajectories) - len(ok)
     stamp = ok[0].stamp if ok else {}
 
     lines = [f"# {title}", ""]
+    if expected is not None:
+        correct = sum(bool(t.reward.get("correct")) for t in ok)
+        valid_format = sum(bool(t.reward.get("format_valid")) for t in ok)
+        lines += [f"状态：{'完整' if len(trajectories) == expected else '未完成，不能作为正式结果'}", "",
+                  f"主指标分母为全部 {expected} 题，错误与缺失均按失败计。",
+                  f"pass@1：{correct}/{expected} = {_pct(correct / expected) if expected else '0%'}；"
+                  f"格式合法：{valid_format}/{expected}；错误：{failed}；缺失：{expected-len(trajectories)}。", ""]
 
     # The environment a number was produced under is part of the number.
     if stamp:
@@ -112,9 +120,9 @@ def render(
             "",
         ]
     if failed:
-        lines += [f"> ⚠ {failed} 条轨迹因错误未完成，未计入下表。", ""]
+        lines += [f"> ⚠ {failed} 条轨迹因错误未完成，计入主指标分母；以下切片仅描述有效轨迹。", ""]
 
-    lines += ["## 结果", "",
+    lines += ["## 有效轨迹切片（不含错误或缺失）", "",
               "| 切片 | n | pass@1 | EM | F1 | 格式合法 | 作废 | 放弃 |",
               "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for s in slices(trajectories, tasks_by_id):

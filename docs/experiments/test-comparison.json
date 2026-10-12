@@ -1,0 +1,40 @@
+{
+  "paths": {
+    "SFT": "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps-test/sft.jsonl",
+    "GRPO-500": "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps-test/grpo500.jsonl"
+  },
+  "summaries": {
+    "全部 459 题": {
+      "SFT": {
+        "n": 459,
+        "correct": 162,
+        "format_valid": 405,
+        "errors": 2,
+        "gave_up": 52
+      },
+      "GRPO-500": {
+        "n": 459,
+        "correct": 190,
+        "format_valid": 393,
+        "errors": 6,
+        "gave_up": 60
+      }
+    }
+  },
+  "paired": {
+    "全部 459 题": {
+      "GRPO-500": {
+        "wins": 39,
+        "losses": 11,
+        "delta": 0.06100217864923747,
+        "ci95": [
+          0.030501089324618737,
+          0.0915032679738562
+        ]
+      }
+    }
+  },
+  "candidate_pairs": {
+    "全部 459 题": {}
+  }
+}

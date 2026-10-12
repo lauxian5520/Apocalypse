@@ -7,6 +7,8 @@ import asyncio
 import logging
 import os
 import sys
+import time
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -21,6 +23,8 @@ if sys.version_info < (3, 10):
         f"{sys.version.split()[0]}). Please switch interpreter and reinstall dependencies."
     )
 
+from core.runtime import acquire_runtime_lock, check_storage
+from core.database import engine
 from core.config import get_settings
 from core.errors import AppError
 from core.paths import PROJECT_ROOT
@@ -30,6 +34,7 @@ from routers import api_router
 from services.feed_service import has_cached_feeds, refresh_all, start_scheduler
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
@@ -39,6 +44,7 @@ NO_CACHE_SUFFIXES = (".js", ".css", ".html")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    runtime_lock = acquire_runtime_lock(settings.var_dir)
     logger.info("Preparing database…")
     init_database()
 
@@ -49,15 +55,22 @@ async def lifespan(app: FastAPI):
     # marked running was cut off by the last shutdown.
     reset_running_sessions()
 
-    if not has_cached_feeds():
+    check_storage(settings, engine)
+
+    if settings.feeds_enabled and not has_cached_feeds():
         logger.info("No feed data found, running initial scrape…")
         asyncio.create_task(refresh_all())
 
-    scheduler = start_scheduler()
+    scheduler = start_scheduler() if settings.feeds_enabled else None
     logger.info("🚀 Apocalypse backend started (data dir: %s)", settings.var_dir)
-    yield
-
-    scheduler.shutdown(wait=False)
+    try:
+        yield
+    finally:
+        from routers.harness import stop_turns
+        await stop_turns()
+        if scheduler:
+            scheduler.shutdown(wait=False)
+        runtime_lock.close()
     logger.info("Apocalypse backend stopped.")
 
 
@@ -96,11 +109,39 @@ def create_app() -> FastAPI:
     async def handle_app_error(_: Request, exc: AppError):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
 
+    @app.middleware("http")
+    async def request_log(request: Request, call_next):
+        request_id = uuid.uuid4().hex
+        started = time.monotonic()
+        category = "none"
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            category = type(exc).__name__
+            response = JSONResponse(status_code=500, content={"detail": "服务暂时不可用", "request_id": request_id})
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "private, no-store"
+        route = getattr(request.scope.get("route"), "path", "unmatched")
+        logger.info("request id=%s method=%s route=%s status=%s duration_ms=%d error=%s",
+                    request_id, request.method, route, response.status_code,
+                    (time.monotonic() - started) * 1000, category)
+        return response
+
     app.include_router(api_router)
 
     @app.get("/healthz", tags=["ops"])
     def healthz():
         return {"status": "ok", "version": app.version}
+
+    @app.get("/readyz", tags=["ops"])
+    def readyz():
+        try:
+            check_storage(settings, engine)
+        except Exception:
+            return JSONResponse(status_code=503, content={"status": "not_ready"})
+        return {"status": "ready"}
 
     # Mounted last: a Mount on "/" matches every path and would shadow any
     # route declared after it.

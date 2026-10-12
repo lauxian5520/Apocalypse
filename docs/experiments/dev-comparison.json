@@ -1,0 +1,175 @@
+{
+  "paths": {
+    "SFT": "rl/data/eval/hotpotqa-qwen3-8b-sft/sft.jsonl",
+    "GRPO-75": "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps/grpo75.jsonl",
+    "GRPO-500": "rl/data/eval/hotpotqa-qwen3-8b-grpo-12steps/grpo500.jsonl"
+  },
+  "summaries": {
+    "全部 457 题": {
+      "SFT": {
+        "n": 457,
+        "correct": 170,
+        "format_valid": 399,
+        "errors": 6,
+        "gave_up": 52
+      },
+      "GRPO-75": {
+        "n": 457,
+        "correct": 177,
+        "format_valid": 390,
+        "errors": 7,
+        "gave_up": 60
+      },
+      "GRPO-500": {
+        "n": 457,
+        "correct": 187,
+        "format_valid": 392,
+        "errors": 8,
+        "gave_up": 57
+      }
+    },
+    "周期评测 100 题": {
+      "SFT": {
+        "n": 100,
+        "correct": 38,
+        "format_valid": 88,
+        "errors": 2,
+        "gave_up": 10
+      },
+      "GRPO-75": {
+        "n": 100,
+        "correct": 42,
+        "format_valid": 84,
+        "errors": 1,
+        "gave_up": 15
+      },
+      "GRPO-500": {
+        "n": 100,
+        "correct": 40,
+        "format_valid": 86,
+        "errors": 2,
+        "gave_up": 12
+      }
+    },
+    "其余 357 题": {
+      "SFT": {
+        "n": 357,
+        "correct": 132,
+        "format_valid": 311,
+        "errors": 4,
+        "gave_up": 42
+      },
+      "GRPO-75": {
+        "n": 357,
+        "correct": 135,
+        "format_valid": 306,
+        "errors": 6,
+        "gave_up": 45
+      },
+      "GRPO-500": {
+        "n": 357,
+        "correct": 147,
+        "format_valid": 306,
+        "errors": 6,
+        "gave_up": 45
+      }
+    }
+  },
+  "paired": {
+    "全部 457 题": {
+      "GRPO-75": {
+        "wins": 14,
+        "losses": 7,
+        "delta": 0.015317286652078774,
+        "ci95": [
+          -0.00437636761487965,
+          0.0350109409190372
+        ]
+      },
+      "GRPO-500": {
+        "wins": 36,
+        "losses": 19,
+        "delta": 0.037199124726477024,
+        "ci95": [
+          0.006564551422319475,
+          0.06783369803063458
+        ]
+      }
+    },
+    "周期评测 100 题": {
+      "GRPO-75": {
+        "wins": 5,
+        "losses": 1,
+        "delta": 0.04,
+        "ci95": [
+          -0.01,
+          0.09
+        ]
+      },
+      "GRPO-500": {
+        "wins": 8,
+        "losses": 6,
+        "delta": 0.02,
+        "ci95": [
+          -0.05,
+          0.09
+        ]
+      }
+    },
+    "其余 357 题": {
+      "GRPO-75": {
+        "wins": 9,
+        "losses": 6,
+        "delta": 0.008403361344537815,
+        "ci95": [
+          -0.014005602240896359,
+          0.028011204481792718
+        ]
+      },
+      "GRPO-500": {
+        "wins": 28,
+        "losses": 13,
+        "delta": 0.04201680672268908,
+        "ci95": [
+          0.008403361344537815,
+          0.0784313725490196
+        ]
+      }
+    }
+  },
+  "candidate_pairs": {
+    "全部 457 题": {
+      "GRPO-500 对 GRPO-75": {
+        "wins": 29,
+        "losses": 19,
+        "delta": 0.02188183807439825,
+        "ci95": [
+          -0.006564551422319475,
+          0.05032822757111598
+        ]
+      }
+    },
+    "周期评测 100 题": {
+      "GRPO-500 对 GRPO-75": {
+        "wins": 5,
+        "losses": 7,
+        "delta": -0.02,
+        "ci95": [
+          -0.09,
+          0.05
+        ]
+      }
+    },
+    "其余 357 题": {
+      "GRPO-500 对 GRPO-75": {
+        "wins": 24,
+        "losses": 12,
+        "delta": 0.03361344537815126,
+        "ci95": [
+          0.0,
+          0.06722689075630252
+        ]
+      }
+    }
+  }
+}

@@ -16,9 +16,20 @@ import os
 import sys
 import traceback
 import uuid
+import tempfile
+import shutil
+import atexit
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+
+# Offline checks never touch a deployment database or source contracts.
+_check_root = tempfile.TemporaryDirectory(prefix="apocalypse-harness-check-")
+atexit.register(_check_root.cleanup)
+if "--offline" in sys.argv:
+    os.environ.update(APP_ENV="test", VAR_DIR=_check_root.name, DB_TYPE="sqlite",
+                      SQLITE_PATH=str(Path(_check_root.name) / "db.sqlite"),
+                      HARNESS_DIR=str(Path(_check_root.name) / "harness"))
 
 import httpx  # noqa: E402
 
@@ -43,6 +54,13 @@ from harness.tools.registry import ToolRegistry, list_presets, load_specs  # noq
 from models.harness import HarnessSession  # noqa: E402
 from models.user import User  # noqa: E402
 
+import harness.tools.registry as _tool_registry
+import harness.skills.registry as _skill_registry
+for _module, _attribute, _name in ((_tool_registry, "TOOLS_DIR", "tools"), (_skill_registry, "SKILLS_DIR", "skills")):
+    _copy = Path(_check_root.name) / _name
+    shutil.copytree(getattr(_module, _attribute), _copy)
+    setattr(_module, _attribute, _copy)
+skills.SKILLS_DIR = _skill_registry.SKILLS_DIR
 settings = get_settings()
 
 PASS, FAIL, SKIP = "PASS", "FAIL", "SKIP"
@@ -94,6 +112,10 @@ def check_config() -> str:
 
 def check_database() -> str:
     Base.metadata.create_all(bind=engine)
+    if "--offline" in sys.argv:
+        with SessionLocal() as db:
+            db.add(User(username="__check__", email="check@example.invalid", password_hash="!", is_disabled=True, role="admin"))
+            db.commit()
     from sqlalchemy import inspect
     tables = set(inspect(engine).get_table_names())
     missing = {"harness_sessions", "harness_events"} - tables
@@ -396,10 +418,7 @@ def check_pricing() -> str:
     model = settings.harness_model or provider_config()["model"]
     probe = LLMUsage(model=model, prompt_tokens=1000, completion_tokens=500, cached_tokens=200)
     if estimate_cost(probe) is None:
-        raise RuntimeError(
-            f"当前模型 {model!r} 不在 harness/data/pricing.json 里，"
-            f"会话只会显示 token 数、费用恒为 “—”。已收录：{sorted(table)}"
-        )
+        return f"警告：{model} 未配置价格；保留 Token 统计，费用为未知"
     return f"{model} 已定价 · 表内 {len(table)} 个模型"
 
 

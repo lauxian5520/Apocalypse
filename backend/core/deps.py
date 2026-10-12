@@ -12,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from core.config import get_settings
-from core.database import SessionLocal
+from core.database import SessionLocal, discard_pending_files
 from core.security import csrf_tokens_match, decode_access_token
 from models.user import User
 
@@ -30,6 +30,7 @@ def get_db() -> Iterator[Session]:
         yield db
     finally:
         db.close()
+        discard_pending_files(db)
 
 
 def _token_from_request(request: Request, creds: HTTPAuthorizationCredentials | None) -> str | None:

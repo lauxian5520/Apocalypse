@@ -10,3 +10,10 @@ README.md
 LICENSE
 **/__pycache__/
 *.pyc
+
+# Training environments and delivery artifacts are not build inputs.
+enviroment/
+rl/
+artifacts/
+deploy/certs/
+course/

@@ -18,3 +18,7 @@ venv/
 .vscode/
 .idea/
 .DS_Store
+
+# Delivery output and TLS private material
+artifacts/
+deploy/certs/

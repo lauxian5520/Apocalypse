@@ -23,6 +23,15 @@ logger = logging.getLogger(__name__)
 DEFAULT_PAGE_SIZE = 30
 MAX_PAGE_SIZE = 100
 STATUSES = ("idle", "running", "awaiting_approval", "error")
+_active_turns: set[str] = set()
+
+
+def register_turn(session_id: str) -> None:
+    _active_turns.add(session_id)
+
+
+def release_turn(session_id: str) -> None:
+    _active_turns.discard(session_id)
 
 
 # Events that end a turn, mapped to the status each implies.
@@ -38,7 +47,7 @@ _TERMINAL_STATUS = {
 # its tool calls; the adapter caps that at STREAM_TIMEOUT_SECONDS (300s), and
 # in practice reasoning and content chunks arrive continuously. A turn quieter
 # than this window has lost its worker.
-LIVENESS_WINDOW_MS = 180_000
+LIVENESS_WINDOW_MS = 330_000
 
 
 def _turn_outcome(session_id: str) -> tuple[str | None, int]:
@@ -88,7 +97,7 @@ def reconcile_status(row: HarnessSession) -> HarnessSession:
     authority here for the same reason it is everywhere else in this
     subsystem: it is the only state that survives a lost worker.
     """
-    if row.status != "running":
+    if row.status != "running" or row.id in _active_turns:
         return row
 
     healed, last_time = _turn_outcome(row.id)

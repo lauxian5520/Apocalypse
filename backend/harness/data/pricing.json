@@ -8,8 +8,8 @@
     "wrong one — token counts stay exact either way. The key must match the",
     "model string the provider echoes back verbatim, not the family name: a",
     "deployment running DEEPSEEK_MODEL=deepseek-flash showed no cost at all",
-    "because only deepseek-v4-flash was listed. harness_check.py now fails",
-    "when the configured model is missing from here, so it cannot go unnoticed."
+    "because only deepseek-v4-flash was listed. harness_check.py now warns",
+    "when the configured model is missing; malformed pricing remains an error."
   ],
   "currency": "USD",
   "models": {

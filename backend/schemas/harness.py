@@ -28,6 +28,7 @@ class UsageOut(BaseModel):
     # None when a model in this session has no published rate — an unknown
     # cost is reported as unknown rather than as zero.
     cost_usd: float | None = None
+    unpriced_models: list[str] = []
 
 
 class SessionOut(ORMModel):

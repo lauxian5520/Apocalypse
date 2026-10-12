@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
+from core.database import track_file
 from core.deps import get_db, require_user
 from core.errors import NotFoundError, ValidationError
 from models.message import Message
@@ -53,6 +54,7 @@ async def send_message(
         upload = form.get("file") or form.get("image")
         if upload is not None and getattr(upload, "filename", None):
             stored = await storage_service.save_message_attachment(upload, user.id)
+            track_file(db, stored.path)
     else:
         body = MessageSendIn.model_validate(await request.json())
         content = (body.content or "").strip()

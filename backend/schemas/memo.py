@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -34,6 +35,6 @@ class MemoOut(ORMModel):
 class MemoUpdateIn(BaseModel):
     content: str | None = None
     location: str | None = None
-    visibility: str | None = None
+    visibility: Literal["public", "private"] | None = None
     is_anonymous: bool | None = None
     pinned: bool | None = None

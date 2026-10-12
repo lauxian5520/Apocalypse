@@ -5,6 +5,8 @@
 
 let page = 1, totalPages = 1, isLoading = false;
 let selectedImages = [];
+let currentVisibility = "public";
+let memoLoadGeneration = 0;
 let locatingInProgress = false;
 let locationEnabled = false;
 
@@ -155,13 +157,13 @@ function renderMemoCard(memo) {
         <div class="memo-author-info">
                     <div class="memo-author-name">${memoAuthorProfileHref ? `<a href="${memoAuthorProfileHref}" class="js-user-link" data-uid="${memo.user_id}">${escHtml(memoAuthorName)}</a>` : escHtml(memoAuthorName)}</div>
                     <div class="memo-time">${memoAuthorIdText}${memo.is_anonymous ? ' · 匿名帖' : ''}</div>
-          <div class="memo-time">${formatTime(memo.created_at)}</div>
+          <div class="memo-time">${formatTime(memo.created_at)}${memo.visibility === "private" ? " · 私密（作者和管理员可见）" : ""}</div>
                     ${memo.location ? `<div class="memo-location">📍 ${escHtml(memo.location)}</div>` : ''}
         </div>
         ${memo.pinned ? '<span class="memo-pin" title="置顶">📌</span>' : ''}
         <div class="memo-actions">
           <button class="btn btn-sm ai-explain-btn" data-mid="${memo.id}" title="AI 解释">🤖 AI</button>
-                    ${canDelete ? `<button class="btn btn-sm btn-danger memo-del-btn" data-mid="${memo.id}">删除</button>` : ''}
+                    ${canDelete ? `<button class="btn btn-sm memo-edit-btn" data-mid="${memo.id}">编辑</button><button class="btn btn-sm memo-visibility-btn" data-mid="${memo.id}" data-next="${memo.visibility === "private" ? "public" : "private"}">${memo.visibility === "private" ? "设为公开" : "设为私密"}</button><button class="btn btn-sm btn-danger memo-del-btn" data-mid="${memo.id}">删除</button>` : ''}
         </div>
       </div>
       <div class="memo-content">${escHtml(memo.content)}</div>
@@ -189,16 +191,19 @@ function renderMemoCard(memo) {
 
 // ── Load memos ────────────────────────────────────────────────────
 async function loadMemos(reset = false) {
-    if (isLoading) return;
+    if (isLoading && !reset) return;
+    const generation = ++memoLoadGeneration;
     isLoading = true;
     if (reset) { page = 1; document.getElementById('memos-list').innerHTML = makeSkeleton(4, '160px'); }
 
     try {
-        const data = await apiFetch(`/memos?page=${page}&page_size=10&visibility=public`);
+        const data = await apiFetch(`/memos?page=${page}&page_size=10&visibility=${currentVisibility}`);
+        if (generation !== memoLoadGeneration) return;
         const list = document.getElementById('memos-list');
         if (reset) list.innerHTML = '';
         if (data.items.length === 0 && reset) {
             list.innerHTML = '<div class="empty-state">暂无帖子，来发第一条吧！</div>';
+            document.getElementById('load-more-btn').style.display = 'none';
             return;
         }
         data.items.forEach(m => list.insertAdjacentHTML('beforeend', renderMemoCard(m)));
@@ -208,7 +213,7 @@ async function loadMemos(reset = false) {
     } catch (e) {
         toast('加载失败: ' + e.message, 'error');
     } finally {
-        isLoading = false;
+        if (generation === memoLoadGeneration) isLoading = false;
     }
 }
 
@@ -243,8 +248,9 @@ async function submitMemo(e) {
         selectedImages = [];
         document.getElementById('image-preview').innerHTML = '';
         setLocationEnabled(false);
-        document.getElementById('memos-list').insertAdjacentHTML('afterbegin', renderMemoCard(memo));
-        bindMemoEvents();
+        currentVisibility = memo.visibility;
+        document.getElementById('memo-filter').value = currentVisibility;
+        await loadMemos(true);
     } catch (err) {
         toast(err.message, 'error');
     } finally {
@@ -384,7 +390,7 @@ function bindMemoEvents() {
                     method: 'POST', body: JSON.stringify({ content, image_urls: imgUrls }),
                 });
                 expEl.innerHTML = `<div class="ai-result">🤖 <b>AI 解析：</b><br>${escHtml(r.explanation)}</div>`;
-            } catch (err) { expEl.innerHTML = `<div class="ai-result error">AI 解析失败: ${err.message}</div>`; }
+            } catch (err) { expEl.innerHTML = `<div class="ai-result error">AI 解析失败: ${escHtml(err.message)}</div>`; }
         };
     });
 
@@ -483,7 +489,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         </label>
         <select id="memo-visibility" name="visibility">
           <option value="public">🌐 公开</option>
-          <option value="private">🔒 私密</option>
+          <option value="private">🔒 私密（作者和管理员可见）</option>
         </select>
         <button type="submit" class="btn btn-primary post-btn">发布</button>
       </div>
@@ -495,4 +501,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     <a href="login.html">登录</a> 或 <a href="register.html">注册</a> 后即可发帖、评论
   </div>`;
     }
+});
+
+// Delegated actions also work for cards added after publishing.
+document.addEventListener('change', async (event) => {
+    if (event.target.id !== 'memo-filter') return;
+    currentVisibility = event.target.value;
+    await loadMemos(true);
+});
+document.addEventListener('click', async (event) => {
+    const button = event.target.closest('.memo-edit-btn, .memo-visibility-btn');
+    if (!button) return;
+    const updates = {};
+    if (button.classList.contains('memo-edit-btn')) {
+        const content = prompt('编辑笔记', button.closest('.memo-card').querySelector('.memo-content').textContent);
+        if (content === null || !content.trim()) return;
+        updates.content = content.trim();
+    } else {
+        updates.visibility = button.dataset.next;
+        if (!confirm(updates.visibility === 'public' ? '公开后所有人都可以查看，继续？' : '设为私密后仅作者和管理员可见，继续？')) return;
+    }
+    try {
+        await apiFetch(`/memos/${button.dataset.mid}`, {method: 'PATCH', body: JSON.stringify(updates)});
+        await loadMemos(true);
+    } catch (error) { toast(error.message, 'error'); }
 });

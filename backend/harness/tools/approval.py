@@ -9,6 +9,7 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 
+from core.config import get_settings
 from harness.sandbox.local import parse_command
 from harness.tools.base import PERMISSION_EXEC, PERMISSION_WRITE, ToolSpec
 
@@ -50,6 +51,8 @@ class ApprovalPolicy:
         if spec.permission == PERMISSION_EXEC:
             return self._judge_command(str(args.get("command", "")))
         if spec.permission == PERMISSION_WRITE:
+            if get_settings().harness_write_approval:
+                return Decision(ASK, "写入工作区需要人工批准")
             # The path was already forced inside the workspace by the sandbox,
             # so there is nothing left here for a human to add.
             return Decision(ALLOW)

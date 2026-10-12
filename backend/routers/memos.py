@@ -1,7 +1,9 @@
 """Memo CRUD."""
+from typing import Literal
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.orm import Session
 
+from core.database import track_file
 from core.deps import get_db, optional_user, require_user
 from core.errors import NotFoundError, PermissionError_
 from models.attachment import Attachment
@@ -24,11 +26,11 @@ def _parse_form_bool(value: str | None) -> bool:
 def list_memos(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    visibility: str = Query("public"),
+    visibility: Literal["public", "private"] = Query("public"),
     viewer: User | None = Depends(optional_user),
     db: Session = Depends(get_db),
 ):
-    total, memos = memo_service.list_memos(db, visibility=visibility, page=page, page_size=page_size)
+    total, memos = memo_service.list_memos(db, visibility=visibility, page=page, page_size=page_size, viewer=viewer)
     return Page[MemoOut](
         total=total,
         page=page,
@@ -41,7 +43,7 @@ def list_memos(
 async def create_memo(
     content: str = Form(...),
     location: str = Form(""),
-    visibility: str = Form("public"),
+    visibility: Literal["public", "private"] = Form("public"),
     is_anonymous: str = Form("false"),
     images: list[UploadFile] = File(default=[]),
     user: User = Depends(require_user),
@@ -59,6 +61,7 @@ async def create_memo(
 
     for image in [i for i in images if i.filename][:MAX_IMAGES_PER_MEMO]:
         stored = await storage_service.save_memo_image(image, memo.id)
+        track_file(db, stored.path)
         db.add(
             Attachment(
                 memo_id=memo.id,
@@ -70,7 +73,7 @@ async def create_memo(
         )
 
     db.commit()
-    return memo_service.to_out(memo_service.load_memo(memo.id, db), user)
+    return memo_service.to_out(memo_service.load_memo(memo.id, db, user), user)
 
 
 @router.get("/{memo_id}", response_model=MemoOut)
@@ -79,7 +82,7 @@ def get_memo(
     viewer: User | None = Depends(optional_user),
     db: Session = Depends(get_db),
 ):
-    return memo_service.to_out(memo_service.load_memo(memo_id, db), viewer)
+    return memo_service.to_out(memo_service.load_memo(memo_id, db, viewer), viewer)
 
 
 @router.patch("/{memo_id}", response_model=MemoOut)
@@ -102,7 +105,7 @@ def update_memo(
         setattr(memo, field, value)
 
     db.commit()
-    return memo_service.to_out(memo_service.load_memo(memo_id, db), user)
+    return memo_service.to_out(memo_service.load_memo(memo_id, db, user), user)
 
 
 @router.delete("/{memo_id}", status_code=204)

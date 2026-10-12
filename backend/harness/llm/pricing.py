@@ -5,10 +5,12 @@ renders as "—": a blank is honest, an invented number is not.
 """
 import json
 import logging
+import math
 from functools import lru_cache
 from pathlib import Path
 
 from harness.llm.base import LLMUsage
+from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +21,16 @@ PER_MILLION = 1_000_000
 @lru_cache()
 def _table() -> dict:
     try:
-        with open(PRICING_FILE, "r", encoding="utf-8") as f:
-            return json.load(f).get("models", {})
-    except (OSError, json.JSONDecodeError) as e:
-        logger.warning("[harness] pricing table unreadable (%s); costs will show as unknown", e)
-        return {}
+        with open(get_settings().pricing_file or PRICING_FILE, "r", encoding="utf-8") as f:
+            table = json.load(f)["models"]
+        if not isinstance(table, dict):
+            raise ValueError("models must be an object")
+        for rates in table.values():
+            if not isinstance(rates, dict) or any(type(rates.get(k)) not in (int, float) or not math.isfinite(rates[k]) or rates[k] < 0 for k in ("cache_hit", "input", "output")):
+                raise ValueError("invalid token rates")
+        return table
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise ValueError("费用价目表无效，请检查 PRICING_FILE") from e
 
 
 def estimate_cost(usage: LLMUsage) -> float | None:

@@ -12,6 +12,7 @@ import logging
 from typing import AsyncIterator
 
 import httpx
+from core.model_requests import reserve_request, record_usage
 
 from core.config import get_settings
 from core.errors import ConfigurationError, UpstreamError
@@ -64,7 +65,8 @@ class OpenAICompatibleAdapter:
         finish_reason = ""
 
         try:
-            async with httpx.AsyncClient(timeout=STREAM_TIMEOUT_SECONDS) as client:
+            reserve_request(payload)
+            async with httpx.AsyncClient(timeout=get_settings().harness_stream_timeout_seconds) as client:
                 async with client.stream(
                     "POST", self._cfg["url"], headers=auth_headers(self._cfg), json=payload
                 ) as resp:
@@ -98,7 +100,7 @@ class OpenAICompatibleAdapter:
         except UpstreamError:
             raise
         except Exception as e:
-            raise UpstreamError(f"AI API Error ({self._cfg['url']}): {_error_text(e)}")
+            raise UpstreamError(f"AI API Error: {_error_text(e)}")
 
         yield LLMDelta(result=LLMResult(
             content="".join(content_parts),
@@ -118,6 +120,7 @@ class OpenAICompatibleAdapter:
         # The client is built inside the try because constructing it can fail
         # too (a broken proxy env var), and that used to escape as a raw 500.
         try:
+            reserve_request(payload)
             async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
                 resp = await client.post(
                     self._cfg["url"], headers=auth_headers(self._cfg), json=payload
@@ -129,9 +132,9 @@ class OpenAICompatibleAdapter:
             content = message.get("content") or ""
             finish_reason = choice.get("finish_reason") or ""
         except (KeyError, IndexError, TypeError, ValueError) as e:
-            raise UpstreamError(f"AI 返回格式无法解析 ({self._cfg['url']}): {e}")
+            raise UpstreamError("AI 返回格式无法解析")
         except Exception as e:
-            raise UpstreamError(f"AI API Error ({self._cfg['url']}): {_error_text(e)}")
+            raise UpstreamError(f"AI API Error: {_error_text(e)}")
 
         # A thinking model spends its output budget on reasoning first, so too
         # small a cap returns nothing at all. Say so instead of handing back an
@@ -218,6 +221,7 @@ def _parse_sse_line(line: str) -> dict | None:
 
 
 def _read_usage(raw: dict, model: str) -> LLMUsage:
+    record_usage(raw)
     # DeepSeek reports cache hits under its own key; OpenAI nests them in
     # prompt_tokens_details. Read whichever is present.
     cached = raw.get("prompt_cache_hit_tokens")
@@ -239,24 +243,9 @@ async def _raise_for_stream_status(resp: httpx.Response, url: str) -> None:
     """
     if resp.status_code < 400:
         return
-    try:
-        body = (await resp.aread()).decode("utf-8", "replace")
-    except Exception:
-        body = ""
-    detail = f"HTTP {resp.status_code}"
-    if body:
-        detail += f": {body[:500]}"
-    raise UpstreamError(f"AI API Error ({url}): {detail}")
+    raise UpstreamError(f"AI API Error: HTTP {resp.status_code}")
 
 
 def _error_text(exc: Exception) -> str:
-    resp = getattr(exc, "response", None)
-    if resp is not None:
-        try:
-            body = resp.text
-        except Exception:
-            body = ""
-        if body:
-            return f"HTTP {resp.status_code}: {body[:500]}"
-        return f"HTTP {resp.status_code}"
-    return str(exc) or exc.__class__.__name__
+    response = getattr(exc, "response", None)
+    return f"HTTP {response.status_code}" if response is not None else type(exc).__name__

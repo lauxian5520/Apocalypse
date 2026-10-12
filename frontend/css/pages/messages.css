@@ -19,3 +19,8 @@ body { padding-top: 80px; }
 .msg-file-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .28rem .55rem; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid var(--border); font-size: .78rem; color: var(--text-2); }
 .dm-attach-hint { color: var(--text-3); font-size: .78rem; margin-left: .2rem; }
 @media (max-width: 900px) { .chat-layout { grid-template-columns: 1fr; } }
+
+/* Keep the narrow-screen message composer free of floating decorations. */
+@media (max-width: 600px) {
+  #sprite-container, #sprite-clock { display: none !important; }
+}

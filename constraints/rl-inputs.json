@@ -1,0 +1,10 @@
+{
+  "Qwen/Qwen2.5-1.5B-Instruct": {
+    "tokenizer_sha256": "2dc9fd24fef5bc6d04a0560ee89362ba5b4ee47e171b53e4287cc6726237de6f",
+    "template_sha256": "cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f"
+  },
+  "Qwen/Qwen3-8B": {
+    "tokenizer_sha256": "934c73f70d9dbdc5c03916ec8045c27749cc2580d14447fc90d05696101af934",
+    "template_sha256": "709357c617f11bebcf7d6fd1e69ecbef55c17f29ac77e699c3b633be49d42784"
+  }
+}

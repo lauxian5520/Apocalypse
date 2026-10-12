@@ -28,10 +28,9 @@
 #     The return type of `tokenize=True` changed between 4.x (list) and 5.x
 #     (BatchEncoding); `rl/env/template.py::encode` handles both.
 #
-# Developed and verified against transformers 5.17.0 / tokenizers 0.23.2 on the
-# tokenization side. The training path has not been run on a GPU in this
-# repository — `python -m rl.train.run_grpo --smoke` is the first thing to run
-# on the box, precisely because of that.
+# Existing SFT and GRPO GPU runs are documented in docs/experiments.
+# Historical training revisions were not recorded. The constraints file captures
+# the current delivery environment, not a claimed historical environment.
 
 torch>=2.9
 vllm>=0.27

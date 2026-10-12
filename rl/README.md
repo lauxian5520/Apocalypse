@@ -369,16 +369,13 @@ python -m rl.checks.rl_check --offline
 `python -m rl.checks.rl_check --offline` 检查语料、轨迹、两代 Qwen 模板、训练编排与多卡布局；
 没有 torch 的解释器会跳过数值损失阶段。
 
-**需要 GPU 才能跑**（代码已写完，缺的是卡）：
+**GPU 训练已有实际产物**：本地记录包含 Qwen3-8B SFT 710 步与 GRPO 500 步，
+以及完整 dev/test 对照。test 上 SFT 为 162/459（35.3%），GRPO-500 为
+190/459（41.4%）；格式合法率同时下降，尚需进一步研究。
 
-| | |
-|---|---|
-| `run_sft train` | LoRA 微调 —— 需要 torch + peft |
-| `run_grpo` | 正式训练 —— 需要 torch + peft + 一个 vLLM 进程 |
-| 信用分配三方案消融 | 依赖上面两步的产物 |
-
-没有卡时这两个入口会**提前退出并给出可操作的提示**（缺哪个包、怎么装、为什么开发机的
-3.14 解释器装不了 torch），而不是从某个用户没提过的模块里抛 `ModuleNotFoundError`。
+可核验报告、历史记录限制、产物清单和重新计算命令见
+[交付实验报告](../docs/experiments/README.md)。本轮不追加完整训练或消融。
+历史训练提交未被记录，当前打包提交不能当作训练提交。
 
 ## 致谢与许可
 

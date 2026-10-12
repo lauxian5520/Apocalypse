@@ -1,6 +1,7 @@
 """Application settings, loaded from the project-root `.env` file."""
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,9 +17,19 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     # ── Runtime data location ─────────────────────────────────────
+    app_env: Literal["development", "production", "test"] = "development"
+    registration_enabled: bool | None = None
+    feeds_enabled: bool = True
+    pricing_file: str = ""
+    harness_auto_title: bool = True
+    harness_write_approval: bool = True
+    model_request_ledger: str = ""
+    model_request_limit: int = 0
+    model_output_limit: int = 0
     # One knob moves every piece of mutable state. The four paths below are
     # derived from it and only need setting to split them across volumes.
     var_dir: str = str(DEFAULT_VAR_DIR)
@@ -84,6 +95,7 @@ class Settings(BaseSettings):
     harness_preset: str = "standard"
     harness_model: str = ""              # blank follows the provider's own model
     harness_max_steps: int = 24
+    harness_stream_timeout_seconds: float = 300
     # Output cap per model call. 4096 truncates a `write` of any real file
     # mid-arguments, and a truncated tool call is unrecoverable — the JSON
     # never closes. Billing is per token actually generated, so a higher
@@ -145,6 +157,21 @@ class Settings(BaseSettings):
         # Resolved against the repository root, not VAR_DIR: the corpus is an
         # input built by `rl/`, not runtime state the deployment owns.
         self.harness_corpus_dir = resolve(self.harness_corpus_dir or "rl/data/corpus")
+        if self.registration_enabled is None:
+            self.registration_enabled = self.app_env != "production"
+        if self.app_env == "production":
+            if len(self.jwt_secret) < 32 or self.jwt_secret in {"change-me", "your-secret-key"}:
+                raise ValueError("生产环境 JWT_SECRET 必须为至少 32 字符的随机密钥")
+            if not self.cookie_secure:
+                raise ValueError("生产环境必须设置 COOKIE_SECURE=true")
+            if not self.harness_require_admin or self.harness_shell_enabled:
+                raise ValueError("生产环境要求 Harness 管理员专用且关闭 Shell")
+            if any(not Path(directory).is_relative_to(Path(self.var_dir)) for directory in self.runtime_dirs):
+                raise ValueError("生产运行目录必须位于 VAR_DIR 内，以保证完整备份")
+            if not Path(self.sqlite_path).is_relative_to(Path(self.var_dir)):
+                raise ValueError("SQLite 数据库必须位于 VAR_DIR 内")
+            if self.dev_reload:
+                raise ValueError("生产环境禁止 DEV_RELOAD")
         return self
 
     @property

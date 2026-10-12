@@ -277,7 +277,7 @@
         // harness/data/pricing.json.
         const unknown = usage.cost_usd === null || usage.cost_usd === undefined;
         const missing = usage.unpriced_models || [];
-        const cost = unknown ? '—' : `$${usage.cost_usd.toFixed(4)}`;
+        const cost = unknown ? '未配置价格' : `$${usage.cost_usd.toFixed(4)}`;
         const why = unknown && missing.length
             ? ` title="${esc(missing.join('、'))} 不在 harness/data/pricing.json 的价目表里，`
                 + `补上该模型的费率即可显示"`

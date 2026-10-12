@@ -9,7 +9,7 @@
 [简体中文](README.md) · [Quick start](#quick-start) · [Features](#feature-map) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Issues](https://github.com/lauxian5520/Apocalypse/issues)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c3aed.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![Release](https://img.shields.io/github/v/release/lauxian5520/Apocalypse?include_prereleases&sort=semver)](https://github.com/lauxian5520/Apocalypse/releases)
@@ -40,11 +40,10 @@ If Apocalypse is useful to you, consider giving it a ⭐. It helps other develop
 - Replaceable model, tool registry, session store, and sandbox interfaces.
 - Append-only event log as the source of truth for model-message projection.
 - Fork and replay from any event; raw events are never deleted during context compression.
-- Shell disabled by default, admin-only access, path containment, resource limits, and manual approval for unsafe commands.
+- Production keeps Shell disabled and Harness admin-only. Workspace writes require approval by default; subagents deny actions that would require human approval. Private notes, comments, and files are visible only to their author and administrators; direct messages and their files are restricted to the two participants.
 - A three-pane workbench that fits one screen by default: drag any divider (double-click to reset), resize the composer or any tool output, or switch to wide mode. Long turns stay responsive because the inspector appends events instead of re-rendering, and reloading during a running turn reattaches to it with the interrupt button available.
 - Tool arguments are parsed tolerantly — raw newlines inside a `write` payload are recovered byte-for-byte — while a call truncated by the output cap is reported as truncation, not as bad JSON.
-- Per-session cost from a data-file price table keyed by the exact model string; an unpriced model is named rather than silently shown as a dash.
-- Built-in offline wiring checks and live provider probes.
+- Cost estimates use an exact model-name match in the built-in price table or `PRICING_FILE`. Unknown models show “price not configured”; malformed prices remain errors. Interrupted requests may lack final token usage, so observed usage is not a complete invoice.
 
 ## Deep Research RL environment
 
@@ -64,31 +63,59 @@ If Apocalypse is useful to you, consider giving it a ⭐. It helps other develop
 train 1908 · dev 457 · test 459, each frozen with a sha256
 ```
 
-Every change the environment itself made to `backend/` is an addition — the `harness/corpus/` package, one tool module, and a preset with its prompt and tool contract — plus two config fields and one line in the tool registry's gate table. `agent.py`, `projection.py`, `events.py`, `context.py` and `approval.py` are unchanged. (One refactor came first: `contained_path` moved from `services/` to `core/`, because through it `harness/` had been importing FastAPI indirectly, which kept `rl/` from importing the harness at all.) The three `corpus_*` tools are gated off by default (`HARNESS_CORPUS_ENABLED=false`), so the live site's tool set is unaffected. Everything except training itself runs and self-checks on a Raspberry Pi 5.
+RL shares corpus tools and event projection with Harness while retaining the one-way dependency `rl/ → harness`. Corpus tools are disabled on the site by default (`HARNESS_CORPUS_ENABLED=false`).
+
+**Training results:** Qwen3-8B completed 710 SFT steps and 500 GRPO steps. The adapters, training logs, and per-task trajectories are available.
+
+| Split | Base | SFT | GRPO-500 |
+|---|---|---|---|
+| dev (457 tasks) | 97/457 (21.2%) | 170/457 (37.2%) | 187/457 (40.9%) |
+| test (459 tasks) | No comparison supplied | 162/459 (35.3%) | 190/459 (41.4%) |
+
+Accuracy uses every selected task as the denominator, with errors and missing trajectories counted as failures. Results come from the existing single training run and do not establish performance across random seeds.
 
 ## Quick start
 
-### Docker Compose (recommended)
+### Docker Compose (HTTP development)
 
 ```bash
 git clone https://github.com/lauxian5520/Apocalypse.git
 cd Apocalypse
 cp .env.example .env
-docker compose up -d
+# Set a random JWT_SECRET; configure a provider if needed.
+mkdir -p var
+sudo chown -R 10001:10001 var
+docker compose up --build -d --wait
+docker compose exec backend python -m cli.users admin admin@example.com --admin
 ```
 
-Open <http://localhost>. The first registered account becomes the administrator. Core knowledge-space features work without an AI key; configure a cloud provider or local Ollama in `.env` to enable AI features.
+Open <http://localhost> and log in with the CLI-created account. The CLI reads passwords interactively. Basic accounts, notes, and messages do not depend on model API availability. The backend port is not published to the host.
 
-### Local development
+### Local development (Python 3.12)
 
 ```bash
 cp .env.example .env
+python -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements.txt -c constraints/web-py312.txt
 cd backend
-pip install -r requirements.txt
-python main.py
+../.venv/bin/python -m cli.users admin admin@example.com --admin
+../.venv/bin/python main.py
 ```
 
-Then open <http://localhost:8000>. Apocalypse requires Python 3.10 or later.
+Open <http://localhost:8000>. Web and RL use separate dependency environments; pinned versions are under `constraints/`.
+
+### HTTPS production
+
+Prepare the target server, domain, and valid TLS certificate. Place the certificate and key at `deploy/certs/fullchain.pem` and `deploy/certs/privkey.pem`; set a random `JWT_SECRET` of at least 32 characters and exact HTTPS `ALLOWED_ORIGINS` in `.env`, then initialize the data directory permissions as above.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.production.yml up --build -d --wait
+docker compose -f docker-compose.yml -f docker-compose.production.yml exec backend python -m cli.users admin admin@example.com --admin
+```
+
+Production enforces secure cookies, disables public registration by default, keeps Harness admin-only, and rejects enabled Shell. Create invited accounts with the same CLI without `--admin`. Use a single backend process with SQLite. `/healthz` is a liveness probe; `/readyz` checks the database and writable data directories independently of external APIs.
+
+See the [deployment and restore guide](docs/DELIVERY.md) for certificate setup, backup commands, retention, and rollback. Stop backend writes before backing up; the backup tool snapshots SQLite and archives runtime files, while restore verifies integrity and refuses nonempty destinations.
 
 ## Architecture
 
@@ -105,7 +132,7 @@ routers  ->  services | harness  ->  models
 - `frontend`: dependency-light HTML, CSS, and JavaScript UI.
 - `var`: the only mutable runtime directory; database, uploads, feeds, music, and agent workspaces.
 
-For the complete architecture, security model, tool contracts, and verification commands, see the [Chinese technical documentation](README.md#-项目结构).
+For the architecture, security model, and tool contracts, see the [Chinese technical documentation](README.md#-项目结构).
 
 ## Configuration
 
@@ -113,6 +140,12 @@ Copy `.env.example` to `.env`. The most important settings are:
 
 | Variable | Purpose |
 |---|---|
+| `APP_ENV` | `development`, `production`, or `test`; production validates deployment settings |
+| `REGISTRATION_ENABLED` | Public signup; disabled by default in production |
+| `PRICING_FILE` | Optional complete custom model pricing JSON |
+| `FEEDS_ENABLED` | Enable background feed collection |
+| `HARNESS_WRITE_APPROVAL` | Require approval for workspace writes; default `true` |
+| `HARNESS_AUTO_TITLE` | Automatic session titles |
 | `AI_PROVIDER` | `deepseek`, `gemini`, `zhipu`, `openai`, `ollama`, or `custom` |
 | `JWT_SECRET` | Authentication and captcha signing secret; change before deployment |
 | `COOKIE_SECURE` | Enable after HTTPS is configured |
@@ -123,18 +156,6 @@ Copy `.env.example` to `.env`. The most important settings are:
 | `VAR_DIR` | Root directory for all mutable runtime state |
 
 The full table, including subagent limits and context-compression budget, is in the [Chinese README](README.md) (section 配置说明).
-
-## Verification
-
-There is no test framework; each subsystem ships a staged self-check that runs every stage independently and exits non-zero on any failure, so it can gate a deploy script.
-
-```bash
-cd backend && python ../tools/harness_check.py --offline   # 12 local wiring stages, no tokens
-cd backend && python ../tools/harness_check.py             # + real provider calls
-python -m rl.checks.rl_check --offline                     # 21 RL stages, from the repo root
-```
-
-Two of the RL stages need torch and are skipped without it, so an interpreter without torch reports 19 passed and 3 skipped (the third being the real rollout, which `--offline` omits).
 
 ## Contributing and security
 

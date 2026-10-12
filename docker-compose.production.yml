@@ -1,0 +1,13 @@
+services:
+  backend:
+    environment:
+      APP_ENV: production
+      COOKIE_SECURE: "true"
+      REGISTRATION_ENABLED: "false"
+      HARNESS_REQUIRE_ADMIN: "true"
+      HARNESS_SHELL_ENABLED: "false"
+  nginx:
+    ports: ["443:443"]
+    volumes:
+      - ./deploy/nginx.production.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/certs:/etc/nginx/certs:ro

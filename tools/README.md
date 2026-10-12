@@ -23,3 +23,10 @@ cd backend && python ../tools/harness_check.py
 # Harness: also check a running server's HTTP + SSE layer
 cd backend && python ../tools/harness_check.py --url http://localhost:8000 --token <admin JWT>
 ```
+
+Delivery commands: `release_check.py --group web|rl|all` runs isolated gates;
+`live_check.py` is the separately triggered 10-request acceptance;
+`backup.py create|verify|restore|prune` manages offline SQLite archives;
+`package_rl.py` audits and packages existing experiments. See `docs/DELIVERY.md`.
+
+`rl_inputs_check.py` 离线校验语料与两套 tokenizer/模板指纹；`package_candidate.py` 导出已审阅的 Git 暂存区快照、tree ID 与 sha256，不创建提交。先暂存完整候选代码，再运行 `python tools/package_candidate.py`；任何未暂存或未审阅的新文件都会阻止打包。

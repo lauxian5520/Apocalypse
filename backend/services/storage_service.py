@@ -6,6 +6,8 @@ size, invent a stored filename, write the bytes. They all call this instead.
 """
 import os
 import uuid
+import io
+from PIL import Image, UnidentifiedImageError
 from dataclasses import dataclass
 
 from fastapi import UploadFile
@@ -56,10 +58,22 @@ async def read_upload(
         kinds = _TYPE_LABELS.get(allowed_types, "、".join(sorted(allowed_types)))
         raise ValidationError(f"{label}仅支持 {kinds} 格式")
 
-    data = await upload.read()
-    if len(data) > max_mb * 1024 * 1024:
-        raise ValidationError(f"{label}不能超过 {max_mb}MB")
-    return data
+    data = bytearray()
+    limit = max_mb * 1024 * 1024
+    while chunk := await upload.read(min(1024 * 1024, limit + 1 - len(data))):
+        data.extend(chunk)
+        if len(data) > limit:
+            raise ValidationError(f"{label}不能超过 {max_mb}MB")
+    if allowed_types == IMAGE_TYPES or (upload.content_type or "").startswith("image/"):
+        try:
+            with Image.open(io.BytesIO(data)) as image:
+                mime = Image.MIME.get(image.format)
+                if mime not in IMAGE_TYPES or mime != upload.content_type:
+                    raise ValueError("image type mismatch")
+                image.verify()
+        except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+            raise ValidationError("图片内容无效或格式不匹配")
+    return bytes(data)
 
 
 def write_bytes(
@@ -73,11 +87,19 @@ def write_bytes(
     default_ext: str = ".bin",
 ) -> StoredFile:
     """Write `data` under a collision-proof name and describe where it went."""
-    filename = f"{prefix}{uuid.uuid4().hex}{_extension(original_name, default_ext)}"
+    image_ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp"}
+    filename = f"{prefix}{uuid.uuid4().hex}{image_ext.get(content_type, _extension(original_name, default_ext))}"
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, filename)
-    with open(path, "wb") as f:
-        f.write(data)
+    try:
+        with open(path, "xb") as f:
+            f.write(data)
+    except FileExistsError:
+        raise
+    except OSError:
+        if os.path.isfile(path):
+            os.remove(path)
+        raise
     return StoredFile(
         filename=filename,
         path=path,

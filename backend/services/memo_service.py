@@ -3,9 +3,10 @@
 This is the logic four endpoints share (list, get, create, update); keeping it
 here stops each of them from re-deriving who is allowed to see an author.
 """
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
-from core.errors import NotFoundError
+from core.errors import NotFoundError, PermissionError_
 from models.comment import Comment
 from models.memo import Memo
 from models.user import User
@@ -28,17 +29,36 @@ def _with_relations(query):
     )
 
 
-def load_memo(memo_id: int, db: Session) -> Memo:
+def readable_clause(viewer: User | None):
+    if viewer and viewer.role == "admin":
+        return True
+    return or_(Memo.visibility == "public", Memo.user_id == viewer.id) if viewer else Memo.visibility == "public"
+
+
+def can_read(memo: Memo, viewer: User | None) -> bool:
+    return memo.visibility == "public" or bool(viewer and (viewer.id == memo.user_id or viewer.role == "admin"))
+
+
+def require_read(memo: Memo, viewer: User | None) -> None:
+    if not can_read(memo, viewer):
+        raise NotFoundError("帖子不存在")
+
+
+def load_memo(memo_id: int, db: Session, viewer: User | None = None) -> Memo:
     memo = _with_relations(db.query(Memo)).filter(Memo.id == memo_id).first()
     if not memo:
         raise NotFoundError("帖子不存在")
+    require_read(memo, viewer)
     return memo
 
 
-def list_memos(db: Session, *, visibility: str, page: int, page_size: int) -> tuple[int, list[Memo]]:
+def list_memos(db: Session, *, visibility: str, page: int, page_size: int, viewer: User | None = None) -> tuple[int, list[Memo]]:
+    if visibility == "private" and viewer is None:
+        raise PermissionError_("请先登录")
     query = (
         _with_relations(db.query(Memo))
         .filter(Memo.visibility == visibility)
+        .filter(readable_clause(viewer))
         .order_by(Memo.pinned.desc(), Memo.created_at.desc())
     )
     total = query.count()

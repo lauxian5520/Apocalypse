@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session, selectinload
 
+from core.database import track_file
 from core.deps import get_db, require_user
 from core.errors import NotFoundError, PermissionError_, ValidationError
 from models.comment import Comment
@@ -9,7 +10,7 @@ from models.memo import Memo
 from models.user import User
 from schemas.comment import CommentOut
 from schemas.common import AuthorOut
-from services import storage_service
+from services import storage_service, memo_service
 
 router = APIRouter(prefix="/memos", tags=["comments"])
 
@@ -37,8 +38,7 @@ async def add_comment(
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    if not db.query(Memo).filter(Memo.id == memo_id).first():
-        raise NotFoundError("帖子不存在")
+    memo_service.load_memo(memo_id, db, user)
 
     content = ""
     image_url = None
@@ -48,7 +48,9 @@ async def add_comment(
         content = str(form.get("content") or "").strip()
         image = form.get("image")
         if image is not None and getattr(image, "filename", None):
-            image_url = (await storage_service.save_comment_image(image, memo_id)).url
+            stored = await storage_service.save_comment_image(image, memo_id)
+            track_file(db, stored.path)
+            image_url = stored.url
     else:
         body = await request.json()
         content = str((body or {}).get("content") or "").strip()
@@ -90,6 +92,8 @@ def delete_comment(
         raise NotFoundError("评论不存在")
 
     memo = db.query(Memo).filter(Memo.id == memo_id).first()
+    if memo:
+        memo_service.require_read(memo, user)
     # The comment author, the memo owner and admins may all remove it.
     allowed = (
         comment.user_id == user.id

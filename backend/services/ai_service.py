@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
+from core.model_requests import reserve_request, record_usage
 
 from core.config import get_settings
 from core.errors import UpstreamError
@@ -54,22 +55,8 @@ def active_model() -> str:
 
 
 def _error_text(exc: Exception) -> str:
-    """Best-effort human-readable reason from an httpx failure.
-
-    For HTTP status errors the provider's own JSON body ("invalid api key",
-    "insufficient balance", ...) is far more useful than the generic message,
-    so read it when it is available.
-    """
-    resp = getattr(exc, "response", None)
-    if resp is not None:
-        try:
-            body = resp.text
-        except Exception:
-            body = ""
-        if body:
-            return f"HTTP {resp.status_code}: {body[:500]}"
-        return f"HTTP {resp.status_code}"
-    return str(exc) or exc.__class__.__name__
+    response = getattr(exc, "response", None)
+    return f"HTTP {response.status_code}" if response is not None else type(exc).__name__
 
 
 def _build_openai_payload(messages: list, model: str, stream: bool = False) -> dict:
@@ -107,20 +94,22 @@ async def chat(messages: list[dict]) -> str:
     # NOTE: the client is created *inside* the try — building it can also fail
     # (e.g. a broken proxy env var), and that used to escape as a raw 500.
     try:
+        reserve_request(payload)
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
             resp = await client.post(cfg["url"], headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
+            record_usage(data.get("usage"))
         if is_ollama:
             return data["message"]["content"]
         return data["choices"][0]["message"]["content"]
     except UpstreamError:
         raise
     except (KeyError, IndexError, TypeError, ValueError) as e:
-        raise UpstreamError(f"AI 返回格式无法解析 ({cfg['url']}): {e}")
+        raise UpstreamError("AI 返回格式无法解析")
     except Exception as e:
         label = "Ollama API Error" if is_ollama else "AI API Error"
-        raise UpstreamError(f"{label} ({cfg['url']}): {_error_text(e)}")
+        raise UpstreamError(f"{label}: {_error_text(e)}")
 
 
 async def _raise_for_stream_status(resp: httpx.Response, url: str) -> None:
@@ -131,14 +120,7 @@ async def _raise_for_stream_status(resp: httpx.Response, url: str) -> None:
     """
     if resp.status_code < 400:
         return
-    try:
-        body = (await resp.aread()).decode("utf-8", "replace")
-    except Exception:
-        body = ""
-    detail = f"HTTP {resp.status_code}"
-    if body:
-        detail += f": {body[:500]}"
-    raise UpstreamError(f"AI API Error ({url}): {detail}")
+    raise UpstreamError(f"AI API Error: HTTP {resp.status_code}")
 
 
 async def chat_stream(messages: list[dict]) -> AsyncIterator[str]:
@@ -156,6 +138,9 @@ async def chat_stream(messages: list[dict]) -> AsyncIterator[str]:
     )
 
     try:
+        if not is_ollama:
+            payload["stream_options"] = {"include_usage": True}
+        reserve_request(payload)
         async with httpx.AsyncClient(timeout=STREAM_TIMEOUT_SECONDS) as client:
             async with client.stream("POST", cfg["url"], headers=headers, json=payload) as resp:
                 await _raise_for_stream_status(resp, cfg["url"])
@@ -184,6 +169,7 @@ async def chat_stream(messages: list[dict]) -> AsyncIterator[str]:
                         continue
                     try:
                         data = json.loads(line)
+                        record_usage(data.get("usage"))
                         choices = data.get("choices") or []
                         if not choices:
                             continue
@@ -196,7 +182,7 @@ async def chat_stream(messages: list[dict]) -> AsyncIterator[str]:
         raise
     except Exception as e:
         label = "Ollama API Error" if is_ollama else "AI API Error"
-        raise UpstreamError(f"{label} ({cfg['url']}): {_error_text(e)}")
+        raise UpstreamError(f"{label}: {_error_text(e)}")
 
 
 async def summarize(text: str, context: str = "content") -> str:

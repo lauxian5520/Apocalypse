@@ -1,0 +1,92 @@
+name: Delivery checks
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12', cache: pip}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: python -m pip install -r backend/requirements.txt -r tools/requirements-checks.txt -c constraints/web-py312.txt
+      - run: python -m pip check
+      - run: python -m playwright install --with-deps chromium
+      - run: python tools/release_check.py --group web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-acceptance
+          path: |
+            artifacts/checks/
+            artifacts/browser/
+            artifacts/server/
+  rl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12', cache: pip}
+      - run: python -m pip install torch==2.13.0+cpu --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple -c constraints/rl-cpu-py312.txt
+      - run: python -m pip install -r rl/requirements.txt -c constraints/rl-cpu-py312.txt
+      - run: python -m pip check
+      - uses: actions/cache@v4
+        with:
+          path: |
+            rl/data/corpus/
+            rl/data/models/
+            rl/env/qwen25/
+          key: rl-inputs-${{ runner.os }}-${{ hashFiles('rl/data/corpus/manifest.json', 'constraints/rl-inputs.json', 'constraints/rl-cpu-py312.txt') }}
+      - run: python -m rl.cli setup
+      - run: python -m rl.cli setup --model Qwen/Qwen3-8B
+      - run: python tools/release_check.py --group rl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rl-acceptance
+          path: artifacts/checks/
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Prepare synthetic production configuration
+        run: |
+          mkdir -p var deploy/certs
+          sudo chown -R 10001:10001 var
+          python - <<'PY'
+          from pathlib import Path
+          import secrets
+          Path('.env').write_text('JWT_SECRET='+secrets.token_hex(32)+'\nFEEDS_ENABLED=false\n')
+          PY
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout deploy/certs/privkey.pem -out deploy/certs/fullchain.pem -days 1 -subj /CN=localhost
+      - run: docker compose -f docker-compose.yml -f docker-compose.production.yml up --build -d --wait
+      - name: HTTPS and restart readiness
+        run: |
+          curl --fail --insecure https://localhost/readyz
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost/readyz)" = 301
+          docker compose -f docker-compose.yml -f docker-compose.production.yml restart backend
+          for i in $(seq 1 30); do
+            if curl --fail --silent --insecure https://localhost/readyz; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p artifacts
+          docker compose -f docker-compose.yml -f docker-compose.production.yml logs --no-color > artifacts/compose.log
+          docker compose -f docker-compose.yml -f docker-compose.production.yml down
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: container-acceptance, path: artifacts/compose.log}

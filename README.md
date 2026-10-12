@@ -9,7 +9,7 @@
 [English](README_EN.md) · [快速开始](#-快速启动) · [功能全景](#-功能全景) · [Roadmap](ROADMAP.md) · [参与贡献](CONTRIBUTING.md) · [报告问题](https://github.com/lauxian5520/Apocalypse/issues)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c3aed.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![Release](https://img.shields.io/github/v/release/lauxian5520/Apocalypse?include_prereleases&sort=semver)](https://github.com/lauxian5520/Apocalypse/releases)
@@ -40,7 +40,7 @@
 <details>
 <summary><strong>适合谁？</strong></summary>
 
-- 想把碎片化信息源收进一个可搜索、可沉淀工作流的学习者与研究者。
+- 想把碎片化信息源收进一个可浏览、可沉淀工作流的学习者与研究者。
 - 想研究 Agent 工具调用、事件溯源、审批与沙箱实现的 AI 工程师。
 - 不愿把个人知识和 API Key 托管给第三方 SaaS 的自托管用户。
 
@@ -48,7 +48,7 @@
 
 ## ✨ 功能特性
 
-- **📝 社交笔记** — 发帖（Markdown + 多图）、评论、匿名发布、AI 解释
+- **📝 社交笔记** — 发帖（Markdown + 多图）、评论、匿名发布、AI 解释；公开/私密切换，私密正文、评论和附件仅作者与管理员可见
 - **🤖 AI 助手「天启」** — 3D 精灵对话（SSE 流式）、页面总结、内容解释（DeepSeek / 智谱 / Gemini / OpenAI / Ollama / 自定义）
 - **🧩 Harness 智能体工作台** — 会话式 Agent：工具调用、人工审批、沙箱工作区、全链路事件日志、轨迹检查器、Token 计费、上下文压缩、会话 fork/replay、可拖拽分栏（详见下方专节）
 - **🧪 深研场（Agentic RL）** — 建在 Harness 之上的 Deep Research 强化学习环境：任务集、验证器、rollout 引擎、loss mask、GRPO（详见[下方专节](#-深研场deep-research-的-agentic-rl-环境)与 [rl/README.md](rl/README.md)）
@@ -58,7 +58,7 @@
 - **🛠 工具箱** — Markdown 编辑器、颜色工具、番茄钟、密码生成器等
 - **🎵 背景音乐** — 管理员上传/管理，全局悬浮播放器
 - **💬 私聊** — 用户间一对一消息，支持图片/文件附件
-- **🔐 用户系统** — 图形验证码注册、Cookie 会话、头像上传、后台用户管理
+- **🔐 用户系统** — Cookie 会话、头像上传、后台用户管理；生产默认关闭公开注册，通过管理员 CLI 创建受邀账号
 - **🛡 安全** — HMAC 无状态验证码、bcrypt 密码哈希、HttpOnly Cookie + CSRF 双提交校验
 
 ## 📂 项目结构
@@ -72,10 +72,9 @@ Apocalypse/
 │   ├── corpus/  tasks/       #   语料构建、泄漏过滤、冻结切分（带 sha256）
 │   ├── verifiers/            #   精确验证器与奖励聚合（塑形项门控在正确性之后）
 │   ├── env/                  #   环境装配、钉死的 chat template、训练期适配器
-│   ├── rollout/  eval/       #   并发多轮 rollout 引擎、评测报告
+│   ├── rollout/  eval/       #   并发多轮 rollout 引擎、策略评估与对比
 │   ├── attribution/          #   上下文消融归因
 │   ├── train/                #   SFT / GRPO / LoRA 热插拔 —— 唯一需要 GPU 的部分
-│   └── checks/rl_check.py    #   分段自检
 ├── backend/                  # 后端代码（只读，不含任何运行时数据）
 │   ├── main.py               # 应用装配：中间件 → 异常处理 → 路由 → 静态文件
 │   ├── core/                 # 基础设施：谁都可以依赖，它不依赖任何人
@@ -125,7 +124,7 @@ Apocalypse/
 │       ├── widgets/          #   floating-panel（拖动/缩放）、split-pane（分栏拖拽）、sprite-chat、music-player
 │       └── pages/            #   每页专属逻辑
 │
-├── var/                      # ⚠️ 运行时数据（唯一可变目录，整体备份即可）
+├── var/                      # ⚠️ 运行时数据（备份前停写，通过备份工具生成快照）
 │   ├── db/                   #   SQLite 数据库
 │   ├── uploads/              #   帖子图片、评论图片、聊天附件、头像
 │   ├── music/                #   背景音乐
@@ -247,7 +246,7 @@ Agent 写出来的东西都在会话工作区里，右栏「文件」页签可�
 
 | 想要的东西 | 怎么来 |
 |---|---|
-| `.md` / `.py` / `.tex` / `.csv` / `.json` | `write` 工具直接写，无需审批 |
+| `.md` / `.py` / `.tex` / `.csv` / `.json` | `write` 默认需要人工审批（`HARNESS_WRITE_APPROVAL=true`） |
 | `.docx` | `docx` 技能：Markdown → Word，支持富文本、表格、图片、目录、页码、分页 |
 | `.pptx` | `pptx` 技能：Markdown 大纲 → 幻灯片，支持要点、表格、**原生图表**、图片、分节 |
 | 读回已有的 docx / pptx | `read_docx.py`（pandoc）/ `read_pptx.py`，二进制文件 `read` 看不了 |
@@ -282,6 +281,8 @@ data/skills/pptx/                    ← 技能包
 > 目录名就是技能名，入口必须叫 `SKILL.md`。技能不带缓存，**放进去下一轮就生效，不用重启**。
 > 装完在右栏「插件面板」里能看到它，带「包」标记并列出附带文件；
 > 解析失败的会在那里标红，不会静默消失。
+
+以下脚本执行说明仅适用于显式启用 Shell 的受信任开发环境；生产模式拒绝开启 Shell。
 
 **脚本执行需要 shell**：`HARNESS_SHELL_ENABLED=true`，且 `python3` **不在**自动放行白名单里，
 所以每次跑脚本都会停下来等你批准。这是唯一真正的闸门——沙箱能拦路径越界、CPU、内存、超时，
@@ -324,8 +325,8 @@ data/skills/pptx/                    ← 技能包
 
 | 层 | 措施 |
 |---|---|
-| 谁能用 | `HARNESS_REQUIRE_ADMIN=true`（默认）——只有管理员。项目里第一个注册的账号即管理员 |
-| 能不能执行命令 | `HARNESS_SHELL_ENABLED=false`（默认）——不打开就没有 `bash` 工具 |
+| 谁能用 | `HARNESS_REQUIRE_ADMIN=true`（默认）——只有管理员；生产通过 `python -m cli.users ... --admin` 创建初始管理员 |
+| 能不能执行命令 | `HARNESS_SHELL_ENABLED=false`（默认）——不打开就没有 `bash` 工具，生产配置拒绝开启 |
 | 命令边界 | argv 解析后执行，**从不经过 shell**；`data/shell_allowlist.json` 里的只读命令自动放行，`sudo`/`ssh`/`docker` 等直接拒绝，**其余一律转人工审批**——包括 `python`、`node`、`git`、`curl`、`find`、`awk`，因为它们能执行任意代码或联网 |
 | 文件边界 | 每个会话独占 `var/harness/workspaces/{id}/`，所有路径过 `contained_path()`（与图片上传共用同一份检查），`..`、绝对路径、指向外部的软链接全部拒绝 |
 | 资源边界 | CPU / 地址空间 / 文件大小 `setrlimit`，墙钟超时后杀整个进程组，输出截断，工作区容量配额 |
@@ -343,10 +344,7 @@ sudo chown -R 10001:10001 ./var
 
 ### 会话与成本
 
-- **状态自愈** — 浏览器中途关掉，流式响应的生成器不会立刻被回收，所以收尾工作放在 Starlette 的
-  background task 里（断连也会执行）；`manager.reconcile_status()` 再以事件日志为准兜底，
-  会话不会卡在 `running`。前端同样以服务端状态为准：刷新时轮次仍在跑，就接回「运行中」并露出
-  「中断」按钮——此前刷新后这个按钮是隐藏的，而服务端又拒绝一切新消息，会话在界面上无路可走。
+- **刷新与中断** — Agent 轮次由独立后台任务驱动，SSE 连接关闭不会取消执行。事件持续写入数据库，刷新后可读取进度、重新接入并中断。运行中会话禁止删除；任务结束或进程重启时会校正会话状态。正式部署使用单个后端进程。
 - **工具参数** — 模型写文件时常把真换行、真制表符直接放进 JSON 字符串，严格解析会拒收；这里会
   宽松重解一次，内容逐字节不变。另一种失败是输出触顶、参数被截断——那无法恢复，会被明确报成
   「被截断」并建议拆成多次调用，而不是笼统的「不是合法 JSON」，否则模型会原样重写同一个过长
@@ -365,69 +363,12 @@ sudo chown -R 10001:10001 ./var
 - **思考型模型** — `deepseek-v4-pro` 这类模型会先花输出预算做推理，再吐正文。所以标题、
   摘要这类短输出的 `max_tokens` 必须留足余量（代码里已按 512 / 3000 设置）；预算给小了会
   拿到空正文，此时适配器直接报错而不是返回空串——这个坑最初就是靠这条报错才发现的。
-- **计费** — `data/pricing.json` 是数据文件，**按 provider 回传的模型字符串精确匹配**：
-  `deepseek-flash` 和 `deepseek-v4-flash` 是两个键，差一个前缀就查不到。查不到的模型显示「—」
-  而不是 0，悬停会写明是哪个模型缺价格；`harness_check.py` 也会在当前模型未定价时判失败。
-  token 数无论如何都是准确的。价格会变，请对照 [DeepSeek 官方定价](https://api-docs.deepseek.com/quick_start/pricing) 自行核对。
+- **计费** — 内置 `data/pricing.json` 或部署者提供的 `PRICING_FILE` 按模型名称精确匹配，费用是配置估算。未知模型显示“未配置价格”，界面给出配置提示；损坏的价目表仍是错误，不套用相似模型价格。中断请求可能没有终态用量，因此已观测 Token 不一定覆盖全部账单用量。
 - **提示词快照** — 系统提示词会随 `config/change` 事件写进日志（仅在内容变化时写，不刷日志）。
   因为它包含当天日期、且由 `system.md` 拼出来，读取时重算会让历史会话显示模型当时没见过的
   日期，改过 `system.md` 后更会把全部历史一起改写。投影优先用日志里的快照，没有快照的老会话
   才回落到当前配置。顺带的好处是能看出每个会话当时跑的是哪一版提示词。
 - **fork / replay** — 从任意事件序号分支出新会话，历史与工作区一并复制。
-
-### 验证
-
-**连通性自检** —— 逐段检查每一环，某一段失败不影响后续，一次跑完就知道断在哪：
-
-```bash
-cd backend && python ../tools/harness_check.py --offline      # 只查本地接线，不花 token
-cd backend && python ../tools/harness_check.py                # 加上真实 provider 调用
-cd backend && python ../tools/harness_check.py --url http://localhost:8000 --token <管理员 JWT>
-```
-
-共 16 个阶段。本地接线：配置 → 数据库 → 沙箱与路径收敛 → 工具注册表 → 工具自动发现 → 技能 →
-子代理装配 → 文件产出与下载 → 工具参数解析 → 费用价目表 → 审批策略 → 事件日志与消息投影；
-加上模型调用 → 工具调用（流式拼装）→ 完整一轮 → HTTP 接口与 SSE。全部通过时退出码 0，
-有失败时退出码 1，可直接接进部署脚本。
-
-```
-本地接线
-  ✓ 配置                        deepseek/deepseek-flash · key 已配置 · var=…/var
-  ✓ 数据库                      sqlite · harness_sessions / harness_events 就绪
-  ✓ 沙箱与路径收敛              读写正常 · 越界与绝对路径均被拒绝 · 配额 64MB
-  ✓ 工具注册表                  契约绑定 16 个 · 本模式启用 13 个 · 预设 ['deepresearch', 'minimal', 'standard'] · shell 开
-  ✓ 工具自动发现                契约驱动 8 个模块 · 顺序稳定 · 孤儿契约被拒 · 零注册代码接入 ['load_skill', 'subagent']
-  ✓ 技能                        技能 ['web-research', 'workspace-report', 'docx', 'pptx'] · 清单已注入 · 越权与穿越均被拒 · 坏文件只跳过不致命
-  ✓ 子代理装配                  子代理 ['coder', 'researcher'] · 不可递归 · 共用工作区 · depth 递增 · 严格策略把 ask 变 deny · 上限 16 次/会话
-  ✓ 文件产出与下载              技能包 ['docx', 'pptx'] 可装入工作区（2 个文件）· 越界路径被拒 · zip 可读（3 项）
-  ✓ 工具参数解析                裸控制字符可恢复 · 截断与格式错误分别命名 · 输出上限 8192
-  ✓ 费用价目表                  deepseek-flash 已定价 · 表内 7 个模型
-  ✓ 审批策略                    放行 / 询问 / 拒绝 三类判定均正确
-  ✓ 事件日志与消息投影          3 条事件 → 4 条消息 ['system', 'user', 'assistant', 'tool']
-```
-
-「契约绑定 16 个 · 本模式启用 13 个」的差额就是三个 `corpus_*` 工具：契约存在，但门禁关着。
-
-**RL 环境自检** —— 语料哈希、检索确定性、动作空间与模块门禁、两种 store 的投影一致性、
-验证器用例、分词前缀性质与 loss mask、训练循环编排、LoRA 热插拔接线、`logp_old` 对位、
-GRPO 目标函数，同样是分段自检、失败非零退出。**从仓库根目录运行**（与 `tools/` 相反）：
-
-```bash
-python -m rl.checks.rl_check --offline      # 21 个离线阶段，不花 token
-python -m rl.checks.rl_check                # 再加 1 次真实 rollout
-```
-
-其中「GRPO 损失」「两种 advantage 实现一致」两个阶段需要 torch，没装时跳过——所以在不带
-torch 的解释器上 `--offline` 的结果是 19 通过、3 跳过（两个 torch 阶段，加上被 `--offline`
-跳过的真实 rollout）。
-
-**跑一整轮** —— 不经浏览器执行一次真实任务，打印事件日志、投影出的消息、用量与工作区文件：
-
-```bash
-cd backend && python ../tools/harness_probe.py --prompt "在工作区建一个 hello.txt 写入当前时间，然后读回来"
-```
-
-加 `--keep` 保留会话与工作区以便检查。
 
 ## 🧪 深研场：Deep Research 的 Agentic RL 环境
 
@@ -462,57 +403,72 @@ cd backend && python ../tools/harness_probe.py --prompt "在工作区建一个 h
 | chat template 入库钉死、token 级 loss mask、前缀性质断言 | `rl/env/`、`rl/train/pack.py` |
 | SFT 冷启动、GRPO（token 级归一化）、vLLM LoRA 热插拔 | `rl/train/` |
 
-**架构上的主张**：给一个已有的 Agent Runtime 加上完整的 RL 环境，环境本身对 `backend/` 的改动全是**新增**——
-语料包 `harness/corpus/`、一个工具模块、一个预设及其提示词与工具契约——外加两个配置字段和工具注册表
-门禁里的一行。`agent.py` / `projection.py` / `events.py` / `context.py` / `approval.py` **一行未改**。
-（此外有一处前置重构：`contained_path` 从 `services/` 挪进了 `core/`——`harness/` 经它间接依赖了
-FastAPI，`rl/` 因此根本导入不了 harness。）`HARNESS_CORPUS_ENABLED` 默认关闭，线上站点的工具集不受影响。
+RL 与 Web 共用 `harness/corpus/` 和事件投影接口，保持 `rl/ → harness` 的单向依赖；`HARNESS_CORPUS_ENABLED` 默认关闭，站点不自动暴露语料工具。
 
-除训练本身外，全部在 Raspberry Pi 5 上跑通并通过自检；训练入口在没有 GPU 时会提前退出，
-说明缺哪个包、怎么装，而不是抛一个 `ModuleNotFoundError`。
+**训练成果**：Qwen3-8B 完成 SFT 710 步与 GRPO 500 步，保留了 adapter、训练日志和逐题轨迹。
+
+| 切分 | 基座 | SFT | GRPO-500 |
+|---|---|---|---|
+| dev（457 题） | 97/457（21.2%） | 170/457（37.2%） | 187/457（40.9%） |
+| test（459 题） | 未提供本轮对照 | 162/459（35.3%） | 190/459（41.4%） |
+
+表中正确率以完整题目数为分母；轨迹错误与缺失按失败计。结果来自现有单次训练，不代表多随机种子表现。
 
 ## 🚀 快速启动
 
-### Docker Compose（推荐，约 1 分钟）
+### Docker Compose（HTTP 开发配置）
 
 ```bash
 git clone https://github.com/lauxian5520/Apocalypse.git
 cd Apocalypse
 cp .env.example .env
-docker compose up -d
+# 编辑 .env，设置随机 JWT_SECRET；按需配置现有 Provider
+mkdir -p var
+sudo chown -R 10001:10001 var
+docker compose up --build -d --wait
+docker compose exec backend python -m cli.users admin admin@example.com --admin
 ```
 
-打开 <http://localhost>，注册的第一个账号会自动成为管理员。基础知识空间无需 AI Key；如需 AI 功能，编辑 `.env` 选择一个云端 Provider，或配置本地 Ollama。
+打开 <http://localhost>，使用 CLI 创建的账号登录。基础笔记、账号与私聊不依赖模型 API；AI 功能需要配置 Provider。HTTP 配置用于本地开发，后端不映射宿主机公网端口。
 
-### 方式一：本地开发
-
-```bash
-cp .env.example .env          # 编辑 .env：填 AI API Key，改 JWT_SECRET
-cd backend
-pip install -r requirements.txt
-python main.py
-```
-
-浏览器访问 `http://localhost:8000`（后端同时托管前端静态文件）。
-
-> 运行目录无关：所有路径都相对项目根解析，从任何目录启动都用同一份 `var/` 数据。
-
-### 生产部署
+### 本地开发（Python 3.12）
 
 ```bash
 cp .env.example .env
-# 修改 JWT_SECRET、COOKIE_SECURE 与 ALLOWED_ORIGINS 后再启动
-docker compose up -d
+python -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements.txt -c constraints/web-py312.txt
+cd backend
+../.venv/bin/python -m cli.users admin admin@example.com --admin
+../.venv/bin/python main.py
 ```
 
-访问 `http://your-server-ip`。运行时数据通过 `./var` 单个卷挂载。
+浏览器访问 <http://localhost:8000>，后端同时托管前端。路径相对项目根解析，运行数据默认保存在 `var/`。CLI 交互式读取密码，不在命令行传明文密码。
+
+### HTTPS 生产部署
+
+先准备目标服务器、域名和有效证书，将证书放入 `deploy/certs/fullchain.pem` 与 `privkey.pem`，在 `.env` 设置随机 `JWT_SECRET`（至少 32 字符）及准确的 HTTPS `ALLOWED_ORIGINS`，并初始化 `var` 的容器写入权限。
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.production.yml up --build -d --wait
+docker compose -f docker-compose.yml -f docker-compose.production.yml exec backend python -m cli.users admin admin@example.com --admin
+```
+
+生产配置启用 Secure Cookie、默认关闭公开注册、保持 Harness 管理员专用并关闭 Shell；弱配置会拒绝启动。单个后端进程配合 SQLite，Nginx 提供 HTTPS、限流与 SSE 转发。部署配置和证书准备步骤见 [部署说明](docs/DELIVERY.md)。
+
+备份前停止后端写入，使用 `python tools/backup.py create` 生成 SQLite 快照与文件归档；恢复默认拒绝非空目录并校验完整性。不要直接复制仍在写入的 SQLite 文件。命令、保留策略和匹配版本回滚步骤见 [备份与恢复](docs/DELIVERY.md#备份恢复与回滚)。
 
 ## ⚙️ 配置说明 (`.env`)
 
 | 变量 | 说明 | 示例 |
 |------|------|------|
+| `APP_ENV` | 运行模式；生产启用配置校验 | `development \| production \| test` |
+| `REGISTRATION_ENABLED` | 是否允许公开注册；生产默认关闭 | `false`（生产） |
+| `PRICING_FILE` | 自定义完整模型价目表 JSON，留空使用内置表 | 空 |
+| `FEEDS_ENABLED` | 是否启动信息源抓取任务 | `true` |
+| `HARNESS_WRITE_APPROVAL` | 工作区写入是否必须人工批准 | `true` |
+| `HARNESS_AUTO_TITLE` | 是否自动生成会话标题 | `true` |
 | `VAR_DIR` | 运行时数据根目录，一个开关搬走全部状态 | `./var` |
-| `DB_TYPE` | 数据库类型 | `sqlite \| mysql \| postgresql` |
+| `DB_TYPE` | 数据库类型；默认使用 SQLite | `sqlite \| mysql \| postgresql` |
 | `AI_PROVIDER` | AI 提供商 | `deepseek \| gemini \| zhipu \| openai \| ollama \| custom` |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key | `sk-xxx` |
 | `JWT_SECRET` | 签名密钥（**务必修改**，同时用于登录与验证码） | 随机字符串 |
@@ -547,7 +503,7 @@ ZHIPU_API_KEY=你的 API Key
 ZHIPU_MODEL=glm-4.7-flash
 ```
 
-改完重启后端生效。用 `python ../tools/ai_probe.py` 可单独验证 Key 是否可用。
+改完重启后端生效。
 
 ### 认证机制
 
@@ -557,15 +513,15 @@ ZHIPU_MODEL=glm-4.7-flash
 
 ## 👤 首次使用
 
-1. 访问 `/register.html` 注册（**第一个账号自动成为管理员**）
-2. 登录后即可发帖、评论、私聊
-3. 管理员访问 `/admin.html` 管理用户与背景音乐
-4. `.env` 填好 AI Key 并重启，即可使用 AI 功能
+1. 用管理员 CLI 创建初始管理员及受邀账号；生产默认关闭 `/register.html` 公开注册。
+2. 登录后可发布公开或私密笔记；私密正文、评论、图片与附件仅作者和管理员可见，界面显示“作者和管理员可见”。
+3. 私聊及其附件仅通信双方可访问，管理员不会自动获得访问权；无法关联到数据库记录的上传文件默认拒绝访问。
+4. 管理员在 `/admin.html` 管理账号及音乐；现有 Provider 配置生效后可使用 AI 和 `/harness.html` 工作台。
 
 ## 🔑 API 文档
 
 启动后访问 `http://localhost:8000/docs` 查看 Swagger 交互式文档，
-`http://localhost:8000/healthz` 为健康检查端点。
+`/healthz` 检查进程存活，`/readyz` 检查数据库连接与必要目录写入；外部模型或信息源故障不会使基础站点失去就绪状态。
 
 ## 📄 License
 
