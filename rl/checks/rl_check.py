@@ -32,6 +32,10 @@ for _p in (REPO_ROOT, os.path.join(REPO_ROOT, "backend")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from rl.model_storage import configure_hf_home
+
+configure_hf_home()
+
 # Must precede any import that reaches `core.config`, whose `get_settings()` is
 # `@lru_cache`d — the first caller freezes the value.
 os.environ.setdefault("HARNESS_CORPUS_ENABLED", "true")
