@@ -13,14 +13,40 @@
             <button class="mp-circle" id="mp-prev" title="上一首" aria-label="上一首">⏮</button>
             <button class="mp-circle mp-circle-main" id="mp-play" title="播放/暂停" aria-label="播放或暂停">▶</button>
             <button class="mp-circle" id="mp-next" title="下一首" aria-label="下一首">⏭</button>
+            <button class="mp-circle mp-vol" id="mp-mute" title="静音" aria-label="静音">🔊</button>
+            <input type="range" id="mp-volume" class="mp-vol" min="0" max="100" value="70" step="1" title="音量" aria-label="音量">
         </div>
   `;
     document.body.insertAdjacentHTML('beforeend', playerHTML);
 
     const player = document.getElementById('music-player');
     const playBtn = document.getElementById('mp-play');
+    const muteBtn = document.getElementById('mp-mute');
+    const volSlider = document.getElementById('mp-volume');
+
+    let lastVolume = 0.7;   // non-zero level to restore after unmuting
+
+    function syncVolumeUI() {
+        const pct = Math.round(audio.volume * 100);
+        volSlider.value = String(pct);
+        volSlider.style.setProperty('--mp-fill', `${pct}%`);
+        volSlider.title = `音量 ${pct}%`;
+        const muted = audio.volume === 0;
+        muteBtn.textContent = muted ? '🔇' : '🔊';
+        muteBtn.title = muted ? '取消静音' : '静音';
+        muteBtn.setAttribute('aria-label', muteBtn.title);
+    }
+
+    function setVolume(v) {
+        const clamped = Math.min(1, Math.max(0, v));
+        audio.volume = clamped;
+        if (clamped > 0) lastVolume = clamped;
+        syncVolumeUI();
+        saveState(true);
+    }
 
     audio.volume = 0.7;
+    syncVolumeUI();
 
     function getCurrentTrack() {
         return tracks[currentIdx] || null;
@@ -36,6 +62,7 @@
             currentIdx,
             currentTime: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
             volume: Number.isFinite(audio.volume) ? audio.volume : 0.7,
+            lastVolume: Number.isFinite(lastVolume) && lastVolume > 0 ? lastVolume : 0.7,
             paused: audio.paused,
             updatedAt: now,
         };
@@ -136,6 +163,12 @@
         currentIdx = (currentIdx + 1) % tracks.length;
         loadTrack(currentIdx, { autoplay: true, resumeTime: 0 });
     });
+    muteBtn.addEventListener('click', () => {
+        setVolume(audio.volume > 0 ? 0 : (lastVolume || 0.7));
+    });
+    volSlider.addEventListener('input', () => {
+        setVolume(Number(volSlider.value) / 100);
+    });
     // Fetch tracks from API
     async function fetchTracks() {
         try {
@@ -143,8 +176,15 @@
             tracks = data;
             if (tracks.length) {
                 const saved = loadState();
-                if (saved && Number.isFinite(saved.volume)) {
-                    audio.volume = Math.min(1, Math.max(0, Number(saved.volume)));
+                if (saved) {
+                    if (Number.isFinite(saved.lastVolume) && saved.lastVolume > 0) {
+                        lastVolume = saved.lastVolume;
+                    }
+                    const vol = Number.isFinite(saved.volume)
+                        ? Math.min(1, Math.max(0, Number(saved.volume)))
+                        : 0.7;
+                    audio.volume = vol;
+                    syncVolumeUI();
                 }
 
                 if (saved?.trackId) {
@@ -185,6 +225,7 @@
             autoHeight: true,
             minWidth: 88,
             maxWidth: 340,
+            ignore: '.mp-vol',
             onResize: (w) => {
                 player.style.fontSize = `${(w / baseWidth).toFixed(3)}rem`;
             },

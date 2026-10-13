@@ -58,6 +58,64 @@
     box-shadow: 0 0 12px rgba(108, 99, 255, 0.35);
 }
 
+/* ── volume ─────────────────────────────────────────────────────── */
+/* The mute button is a normal .mp-circle; .mp-vol only marks the two
+   controls that the floating-panel drag must ignore. */
+.mp-vol {
+    flex: none;
+}
+
+#mp-volume {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 4.6em;
+    height: 1.8em;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+#mp-volume::-webkit-slider-runnable-track {
+    height: 0.3em;
+    border-radius: 999px;
+    background: linear-gradient(to right,
+        var(--accent) 0, var(--accent) var(--mp-fill, 70%),
+        rgba(255, 255, 255, 0.16) var(--mp-fill, 70%));
+}
+
+#mp-volume::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 0.95em;
+    height: 0.95em;
+    margin-top: -0.325em;   /* (0.3em track − 0.95em thumb) / 2 */
+    border-radius: 50%;
+    border: none;
+    background: #fff;
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+#mp-volume::-moz-range-track {
+    height: 0.3em;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+#mp-volume::-moz-range-progress {
+    height: 0.3em;
+    border-radius: 999px;
+    background: var(--accent);
+}
+
+#mp-volume::-moz-range-thumb {
+    width: 0.95em;
+    height: 0.95em;
+    border: none;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
 @media (max-width: 768px) {
     #music-player {
         top: 78px;
