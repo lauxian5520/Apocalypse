@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.database import track_file
@@ -19,13 +20,11 @@ from core.security import (
     verify_password,
 )
 from models.user import User
-from schemas.auth import CaptchaOut, LoginIn, UserOut
+from schemas.auth import CaptchaOut, LoginIn, MAX_USERNAME_LENGTH, UserOut, UsernameUpdateIn
 from services import storage_service
 from services.captcha_service import generate_captcha, verify_captcha
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-MAX_USERNAME_LENGTH = 50
 
 
 async def _read_registration(request: Request) -> tuple[dict, UploadFile | None]:
@@ -99,11 +98,13 @@ async def register(request: Request, db: Session = Depends(get_db)):
             label="头像",
         )
 
+    is_first_user = db.query(User).count() == 0
     user = User(
         username=username,
         email=email,
         password_hash=hash_password(password),
-        role="admin" if db.query(User).count() == 0 else "user",   # first user is admin
+        role="admin" if is_first_user else "user",
+        can_use_harness=is_first_user,
     )
     db.add(user)
     try:
@@ -156,6 +157,27 @@ def logout():
 
 @router.get("/me", response_model=UserOut)
 def get_me(user: User = Depends(require_user)):
+    return user
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    body: UsernameUpdateIn,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+) -> User:
+    """Rename the authenticated account without changing its ID or permissions."""
+    existing = db.query(User).filter(User.username == body.username, User.id != user.id).first()
+    if existing:
+        raise ValidationError("用户名已存在")
+
+    user.username = body.username
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ValidationError("用户名已存在")
+    db.refresh(user)
     return user
 
 

@@ -1,6 +1,6 @@
 /* admin.css — page styles for admin.html. */
 body { padding-top: 80px; }
-.page-wrap { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; position: relative; z-index: 2; }
+.page-wrap { max-width: 1120px; margin: 0 auto; padding: 2rem 1.5rem 4rem; position: relative; z-index: 2; }
 .admin-section { margin-bottom: 2.5rem; }
 .admin-section h2 { font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; margin-bottom: 1.25rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
 .upload-form { display: flex; flex-direction: column; gap: 1rem; }
@@ -19,10 +19,13 @@ audio { height: 30px; flex-shrink: 0; }
 .scraper-card small { color: var(--text-2); font-size: 0.78rem; display: block; margin-bottom: 0.75rem; }
 .users-tools { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.8rem; }
 .users-table-wrap { overflow-x: auto; }
-.users-table { width: 100%; border-collapse: collapse; }
+.users-table { width: 100%; min-width: 1040px; border-collapse: collapse; }
 .users-table th, .users-table td { border-bottom: 1px solid var(--border); padding: 0.55rem 0.4rem; text-align: left; font-size: 0.85rem; }
-.users-table th { color: var(--text-2); font-weight: 600; }
+.users-table th { color: var(--text-2); font-weight: 600; white-space: nowrap; }
+.users-table td:nth-child(3), .users-table td:nth-child(4) { max-width: 200px; overflow-wrap: anywhere; }
+.js-toggle-harness { white-space: nowrap; }
+.js-toggle-harness[aria-pressed="true"] { color: #8df7c6; border-color: rgba(141, 247, 198, 0.5); }
 .users-table td img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); }
-.role-badge { padding: 0.15rem 0.45rem; border-radius: 999px; font-size: 0.75rem; border: 1px solid var(--border); }
+.role-badge { padding: 0.15rem 0.45rem; border-radius: 999px; font-size: 0.75rem; border: 1px solid var(--border); white-space: nowrap; }
 .role-admin { color: #8ec5ff; border-color: rgba(142, 197, 255, 0.5); }
 .role-user { color: var(--text-2); }

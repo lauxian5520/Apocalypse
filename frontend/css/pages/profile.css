@@ -10,3 +10,14 @@ body { padding-top: 80px; }
 .stat-label { color: var(--text-3); font-size: 0.8rem; }
 .stat-value { margin-top: 0.2rem; font-weight: 600; }
 .actions { margin-top: 1rem; display: flex; gap: 0.6rem; }
+.profile-card > div { min-width: 0; }
+.profile-name { overflow-wrap: anywhere; }
+.username-form { margin-top: 1rem; }
+.username-form label { display: block; margin-bottom: 0.4rem; font-size: 0.9rem; }
+.username-controls { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.username-controls input { flex: 1; min-width: 0; width: 100%; }
+.username-form small { display: block; margin-top: 0.4rem; color: var(--text-2); }
+@media (max-width: 480px) {
+  .profile-card { align-items: flex-start; flex-direction: column; }
+  .profile-card > div { width: 100%; }
+}

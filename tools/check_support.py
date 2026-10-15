@@ -27,7 +27,7 @@ def test_env(root, **extra):
                MUSIC_DIR=str(root/'music'), FEEDS_DIR=str(root/'feeds'), HARNESS_DIR=str(root/'harness'),
                JWT_SECRET='isolated-test-secret-not-for-deployment', COOKIE_SECURE='false',
                REGISTRATION_ENABLED='true', FEEDS_ENABLED='false', HARNESS_AUTO_TITLE='false',
-               HARNESS_SHELL_ENABLED='false', HARNESS_REQUIRE_ADMIN='true',
+               HARNESS_SHELL_ENABLED='false',
                AI_PROVIDER='custom', CUSTOM_API_URL='http://127.0.0.1:1/v1/chat/completions',
                CUSTOM_API_KEY='test-only', CUSTOM_MODEL='mock', HARNESS_MODEL='',
                PYTHONDONTWRITEBYTECODE='1')
@@ -45,19 +45,20 @@ init_database()
 with SessionLocal() as db:
     for name in ('owner', 'other', 'admin'):
         if not db.query(User).filter(User.username == name).first():
-            db.add(User(username=name, email=name+'@example.invalid', password_hash=hash_password('Review-fixture-42!'), role='admin' if name=='admin' else 'user'))
+            db.add(User(username=name, email=name+'@example.invalid', password_hash=hash_password('Review-fixture-42!'), role='admin' if name=='admin' else 'user', can_use_harness=name=='admin'))
     db.commit()
 '''
     subprocess.run([sys.executable, '-c', code], cwd=ROOT/'backend', env=env, check=True)
 
 
 @contextlib.contextmanager
-def server(root=None, env=None):
+def server(root=None, env=None, seed_accounts=True):
     with tempfile.TemporaryDirectory(prefix='apocalypse-http-') as tmp:
         root = Path(root or tmp)
         root.mkdir(parents=True, exist_ok=True)
         env = env or test_env(root)
-        seed(env)
+        if seed_accounts:
+            seed(env)
         port = free_port()
         log_path = root/'server.log'
         with log_path.open('w') as log:

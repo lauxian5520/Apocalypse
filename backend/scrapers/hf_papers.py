@@ -1,87 +1,75 @@
-"""
-HuggingFace Daily Papers — uses the official HF API endpoint.
-"""
+"""Hugging Face daily/weekly/monthly papers through the official public API."""
+import asyncio
+from datetime import datetime, timedelta, timezone
+import logging
+
 import httpx
 
-# HF has a public JSON endpoint for daily papers
 PAPERS_API = "https://huggingface.co/api/daily_papers"
-PAPERS_HTML = "https://huggingface.co/papers"
+HEADERS = {"User-Agent": "ApocalypseBot/1.0", "Accept": "application/json"}
+logger = logging.getLogger(__name__)
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept": "application/json, text/html, */*",
-}
+
+def _period_queries(period: str, now: datetime) -> list[dict]:
+    """Use server-side period aggregation instead of hundreds of daily requests."""
+    if period == "weekly":
+        year, week, _ = now.isocalendar()
+        return [{"week": f"{year}-W{week:02d}"}]
+    if period == "monthly":
+        return [{"month": now.strftime("%Y-%m")}]
+    if period == "halfyear":
+        first = (now - timedelta(days=180)).replace(day=1)
+        queries = []
+        while first <= now:
+            queries.append({"month": first.strftime("%Y-%m")})
+            first = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
+        return queries
+    # Omit date so weekends and the interval before today's issue is published
+    # receive the latest available issue rather than an empty calendar date.
+    return [{}]
 
 
 async def fetch(period: str = "daily", limit: int = 30) -> list[dict]:
-    from datetime import datetime, timedelta
-    import asyncio
+    """Fetch period rankings with bounded concurrency and real source dates."""
+    now = datetime.now(timezone.utc)
+    days = {"daily": 7, "weekly": 7, "monthly": 31, "halfyear": 180}.get(period, 7)
+    cutoff = now - timedelta(days=days)
+    slots = asyncio.Semaphore(4)
 
-    days = {"daily": 1, "weekly": 7, "monthly": 30, "halfyear": 180}.get(period, 1)
-    base_date = datetime.utcnow()
-    dates = [(base_date - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
-
-    papers_dict = {}
-
-    async def fetch_day(client: httpx.AsyncClient, date_str: str):
+    async def request(client: httpx.AsyncClient, query: dict) -> list:
+        """Contain individual monthly failures while retaining successful results."""
         try:
-            resp = await client.get(PAPERS_API, params={"date": date_str})
-            resp.raise_for_status()
-            for item in resp.json():
-                paper = item.get("paper", item)
-                arxiv_id = paper.get("id", "")
-                if not arxiv_id or arxiv_id in papers_dict:
-                    continue
-                title = paper.get("title", "")
-                url = f"https://huggingface.co/papers/{arxiv_id}"
-                abstract = paper.get("summary", "") or paper.get("abstract", "")
-                upvotes = item.get("numComments", 0) or paper.get("upvotes", 0)
-                if title:
-                    papers_dict[arxiv_id] = {
-                        "title": title,
-                        "url": url,
-                        "abstract": abstract[:500] if abstract else "",
-                        "upvotes": upvotes,
-                        "arxiv_id": arxiv_id,
-                    }
-        except Exception:
-            pass
+            async with slots:
+                response = await client.get(PAPERS_API, params={**query, "sort": "trending", "limit": limit})
+                response.raise_for_status()
+            payload = response.json()
+            return payload if isinstance(payload, list) else []
+        except (httpx.HTTPError, ValueError):
+            logger.warning("Hugging Face paper query failed for %s", query)
+            return []
 
-    async with httpx.AsyncClient(timeout=30, headers=HEADERS, follow_redirects=True) as client:
-        tasks = [fetch_day(client, d) for d in dates]
-        await asyncio.gather(*tasks)
-
-    # Sort by upvotes descending
-    sorted_papers = sorted(papers_dict.values(), key=lambda x: x["upvotes"], reverse=True)
-    if sorted_papers:
-        return sorted_papers[:limit]
-
-    # Fallback: scrape HTML
-    try:
-        from bs4 import BeautifulSoup
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers=HEADERS) as client:
-            resp = await client.get(PAPERS_HTML)
-            resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        papers = []
-        # Try multiple selectors for different HF page layouts
-        for sel in ["article", "div[class*='paper']", ".paper-card"]:
-            articles = soup.select(sel)
-            if articles:
-                for art in articles[:30]:
-                    title_el = art.select_one("h3") or art.select_one("h2") or art.select_one("a")
-                    if not title_el:
-                        continue
-                    title = title_el.get_text(strip=True)
-                    link_el = art.select_one("a[href*='/papers/']")
-                    href = link_el["href"] if link_el else ""
-                    url = f"https://huggingface.co{href}" if href.startswith("/") else href
-                    abstract_el = art.select_one("p")
-                    abstract = abstract_el.get_text(strip=True)[:500] if abstract_el else ""
-                    if title and len(title) > 10:
-                        papers.append({"title": title, "url": url, "abstract": abstract, "upvotes": 0})
-                if papers:
-                    break
-        return papers
-    except Exception:
-        return []
+    async with httpx.AsyncClient(timeout=25, headers=HEADERS, follow_redirects=True) as client:
+        results = await asyncio.gather(*(request(client, query) for query in _period_queries(period, now)))
+    papers: dict[str, dict] = {}
+    for items in results:
+        for item in items:
+            paper = item.get("paper", item)
+            identifier = paper.get("id")
+            title = paper.get("title")
+            featured = paper.get("submittedOnDailyAt") or item.get("publishedAt") or paper.get("publishedAt")
+            try:
+                stamp = datetime.fromisoformat(str(featured).replace("Z", "+00:00"))
+                stamp = stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp
+            except (TypeError, ValueError):
+                continue
+            if not identifier or not title or not cutoff <= stamp <= now + timedelta(minutes=5):
+                continue
+            papers[identifier] = {
+                "title": title, "url": f"https://huggingface.co/papers/{identifier}",
+                "abstract": (paper.get("summary") or paper.get("abstract") or "")[:500],
+                "upvotes": paper.get("upvotes", item.get("upvotes", 0)) or 0,
+                "arxiv_id": identifier, "published_at": paper.get("publishedAt") or stamp.isoformat(),
+                "featured_at": stamp.isoformat(),
+                "authors": [author["name"] for author in paper.get("authors", []) if author.get("name")],
+            }
+    return sorted(papers.values(), key=lambda paper: paper["upvotes"], reverse=True)[:limit]

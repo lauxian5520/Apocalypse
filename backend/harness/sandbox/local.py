@@ -2,7 +2,7 @@
 
 A fence, not a jail: this raises the cost of a mistake, it does not make one
 impossible. The real containment for a public deployment is the layer around
-it — admin-only access, the shell tool off by default, and a container that
+it — explicit per-user access, the shell tool off by default, and a container that
 drops capabilities and does not run as root.
 
 What it does enforce: no shell metacharacters (argv is parsed, never handed to

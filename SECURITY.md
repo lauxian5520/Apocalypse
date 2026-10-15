@@ -20,6 +20,6 @@
 ## Deployment baseline
 
 - 公网部署必须更换 `JWT_SECRET`，启用 HTTPS，并设置 `COOKIE_SECURE=true`。
-- 保持 `HARNESS_REQUIRE_ADMIN=true` 与 `HARNESS_SHELL_ENABLED=false`，除非已经理解并接受风险。
+- 仅向可信用户开通后台中的「Harness 使用权限」，并保持 `HARNESS_SHELL_ENABLED=false`；Harness 授权不授予后台管理权。
 - Agent 沙箱是纵深防御，不是强隔离边界；不要把恶意管理员或任意代码执行者视为受控对象。
 - 不要提交 `.env`、API Key、数据库、上传内容、日志或 `var/` 目录。

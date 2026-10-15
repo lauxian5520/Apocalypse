@@ -18,7 +18,7 @@ def main():
     with patch.dict(os.environ,{},clear=True):
         settings=Settings(**base)
         assert settings.registration_enabled is False
-        for override in ({'jwt_secret':'change-me'},{'cookie_secure':False},{'harness_shell_enabled':True},{'harness_require_admin':False},{'dev_reload':True}):
+        for override in ({'jwt_secret':'change-me'},{'cookie_secure':False},{'harness_shell_enabled':True},{'dev_reload':True}):
             try:Settings(**{**base,**override})
             except ValueError:pass
             else:raise AssertionError(override)

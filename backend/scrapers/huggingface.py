@@ -11,7 +11,7 @@ HEADERS = {
 
 async def fetch(limit: int = 30) -> list[dict]:
     # Try multiple sort options; "trending" may not be supported in all regions
-    for sort_by in ["likes7d", "likes", "downloads"]:
+    for sort_by in ["trendingScore", "likes", "downloads"]:
         try:
             url = "https://huggingface.co/api/models"
             params = {

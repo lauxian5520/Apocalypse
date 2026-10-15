@@ -18,6 +18,24 @@ function summarizeButton(text, ctx, style = 'margin-left:auto') {
 }
 
 // ── GitHub Trending card ─────────────────────────────────────────
+const feedRefreshTimers = new Map();
+
+function feedStatusMessage(payload) {
+    if (payload.refreshing) return '正在同步最新数据，请稍候…';
+    if (payload.status === 'disabled') return '自动抓取未启用，请由管理员开启数据同步。';
+    if (payload.status === 'error') return '数据源暂时无法更新，请稍后重试。';
+    if (payload.stale) return '当前为上次缓存，等待重新同步。';
+    return '';
+}
+
+function feedStatusNotice(payload) {
+    const message = feedStatusMessage(payload);
+    const stamp = payload.source_saved_at || payload.updated_at;
+    const updated = stamp ? `上次同步：${formatDateTime(stamp)}` : '';
+    return message || updated
+        ? `<div class="feed-status" role="status" style="grid-column:1/-1;color:var(--text-2);font-size:.85rem">${escHtml([message, updated].filter(Boolean).join(' · '))}</div>` : '';
+}
+
 function renderGithubCard(item) {
     return `
     <a href="${escHtml(item.url)}" target="_blank" rel="noopener" class="card feed-card">
@@ -61,7 +79,7 @@ function renderHFModelCard(item) {
 function renderGroupedCards(payload, renderFn) {
     const items = payload.items || [];
     const categories = payload.categories || [];
-    if (!items.length) return '<div class="empty-state">暂无数据</div>';
+    if (!items.length) return `<div class="empty-state">${escHtml(feedStatusMessage(payload) || '暂无数据')}</div>`;
 
     const byIdx = new Map(items.map((it, i) => [i + 1, it]));
     const sections = [];
@@ -88,14 +106,20 @@ function renderGroupedCards(payload, renderFn) {
 async function loadClassifiedFeed(endpoint, gridId, renderFn) {
     const grid = document.getElementById(gridId);
     if (!grid) return;
+    clearTimeout(feedRefreshTimers.get(gridId));
+    const version = String(Number(grid.dataset.loadVersion || 0) + 1);
+    grid.dataset.loadVersion = version;
     grid.innerHTML = makeSkeleton(9, '150px');
     try {
         const payload = await apiFetch('/' + endpoint);
+        if (grid.dataset.loadVersion !== version) return;
     const warn = payload.ai_fallback
       ? `<div class="empty-state" style="grid-column:1/-1;border:1px solid var(--border);padding:.7rem 1rem;margin-bottom:.6rem">AI分类暂不可用，已回退默认分类。原因: ${escHtml(payload.ai_error || 'unknown')}</div>`
       : '';
-    grid.innerHTML = warn + renderGroupedCards(payload, renderFn);
+    grid.innerHTML = feedStatusNotice(payload) + warn + renderGroupedCards(payload, renderFn);
+    if (payload.refreshing) feedRefreshTimers.set(gridId, setTimeout(() => loadClassifiedFeed(endpoint, gridId, renderFn), 5000));
     } catch (e) {
+        if (grid.dataset.loadVersion !== version) return;
         grid.innerHTML = `<div class="empty-state error">AI分类加载失败: ${escHtml(e.message)}</div>`;
     }
 }
@@ -116,6 +140,7 @@ function renderPaperCard(item, catName = '') {
         ${catName ? `<span class="tag tag-active">${escHtml(catName)}</span>` : ''}
         ${item.conference ? `<span class="tag">${escHtml(item.conference)}</span>` : ''}
         ${item.year ? `<span class="tag">${escHtml(item.year)}</span>` : ''}
+        ${item.published_at ? `<span class="tag">${escHtml(formatDateTime(item.published_at))}</span>` : ''}
         ${authors ? `<span class="tag" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(authors)}">👤 ${escHtml(authors)}</span>` : ''}
         <span>${item.upvotes !== undefined ? '👍 ' + item.upvotes : (item.citations !== undefined && item.citations !== 0 ? '引用 ' + item.citations : '')}</span>
         ${aiBtn}

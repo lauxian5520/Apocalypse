@@ -30,7 +30,7 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml exec backe
 docker compose -f docker-compose.yml -f docker-compose.production.yml exec backend python -m cli.users invited invited@example.com
 ```
 
-CLI 交互式读取密码，不接受命令行明文密码。生产默认关闭公开注册，已有账号继续使用。不要在公网首次启动时依赖“第一个注册者成为管理员”。生产配置启用 Secure Cookie，拒绝弱配置、Shell 和非管理员 Harness。后端不映射宿主机公网端口。
+CLI 交互式读取密码，不接受命令行明文密码。生产默认关闭公开注册，已有账号继续使用。不要在公网首次启动时依赖“第一个注册者成为管理员”。生产配置启用 Secure Cookie，拒绝弱配置和 Shell；Harness 由后台按用户独立授权，普通用户无需获得管理员身份。后端不映射宿主机公网端口。
 
 `/healthz` 判断进程存活；`/readyz` 检查数据库连接与数据目录写入。Provider 或抓取源不可用不会使基础站点失去就绪状态。Nginx 对登录、验证码限流，限制请求体，关闭 SSE 缓冲。应用日志使用请求 ID、路由模板、状态及耗时，不记录请求正文和认证头；Docker 日志轮转限制为 3×10 MB。
 

@@ -109,7 +109,7 @@ embed no fonts and render on the viewer's machine.
 
 `docker-compose.yml` is the **dev** shape — nginx on `:80`, no TLS, the backend `expose`d but never
 published. `docker-compose.production.yml` layers the production shape on top: `APP_ENV=production`,
-`COOKIE_SECURE=true`, registration closed, Harness admin-only with the shell off, and nginx on
+`COOKIE_SECURE=true`, registration closed, per-user Harness permission with the shell off, and nginx on
 `:443` reading `deploy/certs/`. **Both files must be passed** — a plain `docker compose up` silently
 gives you the dev shape instead:
 
@@ -417,9 +417,10 @@ one — check before repeating a capability claim from it.
 
 The sandbox is a fence, not a jail. It guards against the agent doing something unintended (prompt
 injection in fetched content, a misread instruction), not against a malicious operator. The **code**
-defaults are the safe ones — `HARNESS_REQUIRE_ADMIN=true`, `HARNESS_SHELL_ENABLED=false` — and a new
-deployment should start there. **Production mode enforces both**: `core/config.py` raises
-`ValueError` when `harness_shell_enabled` is true or `harness_require_admin` is false, so an
+defaults require explicit per-user `can_use_harness` permission and keep
+`HARNESS_SHELL_ENABLED=false`. Administrators grant Harness access independently of roles.
+**Production mode enforces shell-off**: `core/config.py` raises
+`ValueError` when `harness_shell_enabled` is true, so an
 `APP_ENV=production` deployment cannot be started with the shell on. Enabling it on a development
 deployment is what hands the approval prompt the entire risk budget — from that point do not
 weaken it to compensate.

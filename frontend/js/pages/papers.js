@@ -5,6 +5,7 @@ const state = { source: 'hf', period: 'daily', hfData: null, arxivData: [],
 let loadVersion = 0;
 let conferenceCatalog = [];
 let conferenceSearchTimer;
+let paperRefreshTimer;
 
 function updateConferenceYears() {
     const select = document.getElementById('conference-year');
@@ -47,21 +48,21 @@ function renderList() {
     } else if (state.source === 'arxiv') {
         document.getElementById('period-tabs').style.display = 'flex'; // Arxiv also uses period filters
         if (!state.arxivData.length) {
-            grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">暂无 ArXiv 论文数据</div>';
+            grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">${escHtml(feedStatusMessage(state.arxivMeta || {}) || '暂无 ArXiv 论文数据')}</div>`;
             return;
         }
-        grid.innerHTML = state.arxivData.map(p => renderPaperCard(p)).join('');
+        grid.innerHTML = feedStatusNotice(state.arxivMeta || {}) + state.arxivData.map(p => renderPaperCard(p)).join('');
     } else { // HuggingFace
         document.getElementById('period-tabs').style.display = 'flex'; // HF also uses period filters
         if (!state.hfData || !state.hfData.items || !state.hfData.items.length) {
-            grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">暂无 HuggingFace 论文数据</div>';
+            grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">${escHtml(feedStatusMessage(state.hfData || {}) || '暂无 HuggingFace 论文数据')}</div>`;
             return;
         }
 
         const items = state.hfData.items;
         const categories = state.hfData.categories || [];
         const byIdx = new Map(items.map((it, i) => [i + 1, it]));
-        let html = '';
+        let html = feedStatusNotice(state.hfData);
 
         if (state.hfData.ai_fallback) {
             html += `<div class="empty-state" style="border:1px solid var(--border);padding:.7rem 1rem;margin-bottom:.6rem;text-align:left;grid-column:1/-1">AI分类暂不可用，已回退默认分类。</div>`;
@@ -99,6 +100,7 @@ function renderList() {
 }
 
 async function loadData() {
+    clearTimeout(paperRefreshTimer);
     clearTimeout(conferenceSearchTimer);
     const version = ++loadVersion;
     const grid = document.getElementById('papers-grid');
@@ -122,8 +124,11 @@ async function loadData() {
             const res = await apiFetch(`/feeds/papers?period=${state.period}`);
             if (version !== loadVersion) return;
             state.arxivData = res.data?.scholar || []; 
+            state.arxivMeta = res;
         }
         renderList();
+        const metadata = state.source === 'hf' ? state.hfData : state.source === 'arxiv' ? state.arxivMeta : null;
+        if (metadata?.refreshing) paperRefreshTimer = setTimeout(loadData, 5000);
     } catch (e) {
         if (version !== loadVersion) return;
         grid.innerHTML = '<div class="empty-state error">加载失败: ' + escHtml(e.message) + '</div>';

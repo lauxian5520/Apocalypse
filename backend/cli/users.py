@@ -30,7 +30,7 @@ def main():
         if db.query(User).filter(or_(User.username == args.username, User.email == args.email)).first():
             parser.error('用户名或邮箱已存在')
         db.add(User(username=args.username, email=args.email, password_hash=hash_password(password),
-                    role='admin' if args.admin else 'user'))
+                    role='admin' if args.admin else 'user', can_use_harness=args.admin))
         db.commit()
     maintenance_lock.close()
     print('账号已创建')

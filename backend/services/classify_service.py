@@ -72,8 +72,10 @@ async def classify(source: str, payload, period: str | None = None) -> dict:
         try:
             with open(cache_file, "r", encoding="utf-8") as f:
                 cached = json.load(f)
-            if cached.get("source_saved_at") == saved_at and cached.get("provider") == model:
-                return cached
+            if (cached.get("source_saved_at") == saved_at and cached.get("provider") == model
+                    and cached.get("items") == items):
+                return {**cached, **{key: payload[key] for key in ("status", "stale", "refreshing")
+                                     if isinstance(payload, dict) and key in payload}}
         except Exception:
             pass    # unreadable cache: fall through and rebuild it
 
@@ -96,10 +98,12 @@ async def classify(source: str, payload, period: str | None = None) -> dict:
         "ai_error": ai_error,
         "categories": result.get("categories", []),
         "items": items,
+        **{key: payload[key] for key in ("status", "stale", "refreshing")
+           if isinstance(payload, dict) and key in payload},
     }
     try:
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(payload_out, f, ensure_ascii=False, indent=2)
+        suffix = f"_{period}" if period else ""
+        feed_service._write_json(f"classified_{source}{suffix}", payload_out)
     except Exception as e:
         logger.warning("[classify] could not write cache %s: %s", cache_file, e)
     return payload_out

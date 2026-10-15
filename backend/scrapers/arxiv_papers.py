@@ -13,7 +13,7 @@ async def fetch(period: str = "daily", limit: int = 200) -> list[dict]:
     days = {"daily": 3, "weekly": 7, "monthly": 30, "halfyear": 180}.get(period, 3) 
     
     # Fetch a large batch to ensure we have enough valid papers after date filtering
-    url = f"http://export.arxiv.org/api/query?search_query={build_arxiv_query()}&sortBy=submittedDate&sortOrder=descending&max_results=500"
+    url = f"https://export.arxiv.org/api/query?search_query={build_arxiv_query()}&sortBy=submittedDate&sortOrder=descending&max_results=500"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"

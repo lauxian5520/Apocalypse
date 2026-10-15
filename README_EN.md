@@ -68,7 +68,7 @@ Live Translation is described as **in-site multilingual translation using a larg
 - Replaceable model, tool registry, session store, and sandbox interfaces.
 - Append-only event log as the source of truth for model-message projection.
 - Fork and replay from any event; raw events are never deleted during context compression.
-- Production keeps Shell disabled and Harness admin-only. Workspace writes require approval by default; subagents deny actions that would require human approval. Private notes, comments, and files are visible only to their author and administrators; direct messages and their files are restricted to the two participants.
+- Production keeps Shell disabled and requires per-user Harness permission. Workspace writes require approval by default; subagents deny actions that would require human approval. Private notes, comments, and files are visible only to their author and administrators; direct messages and their files are restricted to the two participants.
 - A three-pane workbench that fits one screen by default: drag any divider (double-click to reset), resize the composer or any tool output, or switch to wide mode. Long turns stay responsive because the inspector appends events instead of re-rendering, and reloading during a running turn reattaches to it with the interrupt button available.
 - Tool arguments are parsed tolerantly — raw newlines inside a `write` payload are recovered byte-for-byte — while a call truncated by the output cap is reported as truncation, not as bad JSON.
 - Cost estimates use an exact model-name match in the built-in price table or `PRICING_FILE`. Unknown models show “price not configured”; malformed prices remain errors. Interrupted requests may lack final token usage, so observed usage is not a complete invoice.
@@ -143,7 +143,7 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml up --build
 docker compose -f docker-compose.yml -f docker-compose.production.yml exec backend python -m cli.users admin admin@example.com --admin
 ```
 
-Production enforces secure cookies, disables public registration by default, keeps Harness admin-only, and rejects enabled Shell. Create invited accounts with the same CLI without `--admin`. Use a single backend process with SQLite. `/healthz` is a liveness probe; `/readyz` checks the database and writable data directories independently of external APIs.
+Production enforces secure cookies, disables public registration by default, requires per-user Harness permission, and rejects enabled Shell. Create invited accounts with the same CLI without `--admin`. Use a single backend process with SQLite. `/healthz` is a liveness probe; `/readyz` checks the database and writable data directories independently of external APIs.
 
 See the [deployment and restore guide](docs/DELIVERY.md) for certificate setup, backup commands, retention, and rollback. Stop backend writes before backing up; the backup tool snapshots SQLite and archives runtime files, while restore verifies integrity and refuses nonempty destinations.
 
@@ -174,6 +174,11 @@ Copy `.env.example` to `.env`. The most important settings are:
 | `REGISTRATION_ENABLED` | Public signup; disabled by default in production |
 | `PRICING_FILE` | Optional complete custom model pricing JSON |
 | `FEEDS_ENABLED` | Enable background feed collection |
+| `FEEDS_CACHE_TTL_MINUTES` | Project/model/paper cache lifetime; default `360` |
+| `FOCUS_CACHE_TTL_MINUTES` | News refresh interval; default `15` |
+| `FOCUS_MAX_AGE_HOURS` | Maximum news publication age; default `72`; undated items are omitted |
+| `FEEDS_RETRY_SECONDS` | Retry delay after upstream failures; default `300`; successful caches are retained |
+| `FEEDS_INITIAL_WAIT_SECONDS` | Maximum cold-request wait before returning refresh state; default `3` |
 | `HARNESS_WRITE_APPROVAL` | Require approval for workspace writes; default `true` |
 | `HARNESS_AUTO_TITLE` | Automatic session titles |
 | `AI_PROVIDER` | `deepseek`, `gemini`, `zhipu`, `openai`, `ollama`, or `custom` |
@@ -182,13 +187,17 @@ Copy `.env.example` to `.env`. The most important settings are:
 | `DEEPSEEK_MODEL` | DeepSeek model; defaults to `deepseek-chat`, also used by Live Translation |
 | `JWT_SECRET` | Authentication and captcha signing secret; change before deployment |
 | `COOKIE_SECURE` | Enable after HTTPS is configured |
-| `HARNESS_REQUIRE_ADMIN` | Keep the agent workbench admin-only on public deployments |
+| Harness access | Per-user `users.can_use_harness`, managed independently in the admin user list; `HARNESS_REQUIRE_ADMIN` is obsolete |
 | `HARNESS_SHELL_ENABLED` | Disabled by default; read the security model before enabling |
 | `HARNESS_MAX_TOKENS` | Output cap per model call (default `8192`). Too low truncates a `write` mid-arguments, and a truncated tool call cannot be recovered |
 | `HARNESS_CORPUS_ENABLED` | Exposes the `corpus_*` retrieval tools for the RL environment. Off by default; the live site is unaffected |
 | `VAR_DIR` | Root directory for all mutable runtime state |
 
 The full table, including subagent limits and context-compression budget, is in the [Chinese README](README.md) (section 配置说明).
+
+On upgrade, startup adds `can_use_harness` and grants existing administrators access once. New regular accounts start without access; the first registered administrator and CLI-created administrators start with access. Role changes do not alter this permission, and revocations survive restarts. Accounts previously promoted solely for Harness can be returned to the regular user role after confirming their Harness access.
+
+Users can rename themselves on their own profile page, opened from the navigation avatar. Names must be unique and contain 1–50 characters after trimming. Use the new name for subsequent logins; account IDs, content ownership and existing sessions stay associated with the account.
 
 ## Contributing and security
 

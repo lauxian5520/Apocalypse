@@ -12,6 +12,7 @@ enviroment/
 __pycache__/
 *.py[cod]
 .venv/
+.venv-wsl/
 venv/
 
 # Editor / OS

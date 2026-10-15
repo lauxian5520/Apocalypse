@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, DateTime, Enum, Boolean, func
+from sqlalchemy import String, DateTime, Enum, Boolean, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base
 
@@ -16,6 +16,9 @@ class User(Base):
         Enum("user", "admin", name="user_role"), default="user", nullable=False
     )
     is_disabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    can_use_harness: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

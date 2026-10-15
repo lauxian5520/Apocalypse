@@ -100,6 +100,15 @@ def require_admin(user: User = Depends(require_user)) -> User:
     return user
 
 
+def require_harness_user(user: User = Depends(require_user)) -> User:
+    """Require explicit Harness access from the current database user record."""
+    if not settings.harness_enabled:
+        raise HTTPException(status_code=404, detail="Harness 未启用")
+    if not user.can_use_harness:
+        raise HTTPException(status_code=403, detail="尚未获得 Harness 使用权限，请联系管理员开通")
+    return user
+
+
 def optional_user(
     request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),

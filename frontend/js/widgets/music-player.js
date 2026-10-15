@@ -3,7 +3,8 @@
 ═══════════════════════════════════════════════════════════════ */
 (function () {
     const STORAGE_KEY = 'mw_music_state_v1';
-        let tracks = [], currentIdx = 0, audio = new Audio();
+    let tracks = [], currentIdx = 0, audio = new Audio();
+    let fetchingTracks = false;
     let pendingAutoplay = false;
     let lastSaveAt = 0;
 
@@ -15,6 +16,9 @@
             <button class="mp-circle" id="mp-next" title="下一首" aria-label="下一首">⏭</button>
             <button class="mp-circle mp-vol" id="mp-mute" title="静音" aria-label="静音">🔊</button>
             <input type="range" id="mp-volume" class="mp-vol" min="0" max="100" value="70" step="1" title="音量" aria-label="音量">
+            <span id="mp-status" role="status" aria-live="polite">音乐加载中</span>
+            <a id="mp-library" href="admin.html" hidden>添加音乐</a>
+            <button type="button" class="mp-circle mp-vol" id="mp-retry" title="刷新曲库" aria-label="刷新曲库">↻</button>
         </div>
   `;
     document.body.insertAdjacentHTML('beforeend', playerHTML);
@@ -23,6 +27,19 @@
     const playBtn = document.getElementById('mp-play');
     const muteBtn = document.getElementById('mp-mute');
     const volSlider = document.getElementById('mp-volume');
+    const status = document.getElementById('mp-status');
+    const retryBtn = document.getElementById('mp-retry');
+    const libraryLink = document.getElementById('mp-library');
+
+    function syncAvailability() {
+        const empty = tracks.length === 0;
+        player.dataset.empty = String(empty);
+        ['mp-prev', 'mp-play', 'mp-next', 'mp-mute', 'mp-volume'].forEach(id => {
+            document.getElementById(id).disabled = empty;
+        });
+        libraryLink.hidden = !empty || !window.Auth?.isAdmin();
+    }
+    syncAvailability();
 
     let lastVolume = 0.7;   // non-zero level to restore after unmuting
 
@@ -156,10 +173,12 @@
 
     playBtn.addEventListener('click', playPause);
     document.getElementById('mp-prev').addEventListener('click', () => {
+        if (!tracks.length) return;
         currentIdx = (currentIdx - 1 + tracks.length) % tracks.length;
         loadTrack(currentIdx, { autoplay: true, resumeTime: 0 });
     });
     document.getElementById('mp-next').addEventListener('click', () => {
+        if (!tracks.length) return;
         currentIdx = (currentIdx + 1) % tracks.length;
         loadTrack(currentIdx, { autoplay: true, resumeTime: 0 });
     });
@@ -171,10 +190,20 @@
     });
     // Fetch tracks from API
     async function fetchTracks() {
+        if (fetchingTracks) return;
+        fetchingTracks = true;
+        retryBtn.disabled = true;
         try {
-            const data = await fetch('/api/music').then(r => r.json());
+            await window.Auth?.init();
+            const response = await fetch('/api/music');
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            if (!Array.isArray(data)) throw new Error('曲库数据格式错误');
             tracks = data;
+            syncAvailability();
+            status.hidden = tracks.length > 0;
             if (tracks.length) {
+                currentIdx = Math.min(currentIdx, tracks.length - 1);
                 const saved = loadState();
                 if (saved) {
                     if (Number.isFinite(saved.lastVolume) && saved.lastVolume > 0) {
@@ -203,12 +232,26 @@
                     playBtn.textContent = '▶';
                 }
             } else {
-                player.style.display = 'none'; // Hide if no tracks
+                audio.pause();
+                pendingAutoplay = false;
+                currentIdx = 0;
+                status.textContent = '暂无音乐';
+                player.title = '暂无音乐，可由管理员在后台上传曲目';
             }
         } catch {
-            player.style.display = 'none';
+            syncAvailability();
+            status.hidden = false;
+            status.textContent = '音乐加载失败';
+            player.title = '曲库暂时无法加载，请点击刷新曲库重试';
+        } finally {
+            fetchingTracks = false;
+            retryBtn.disabled = false;
         }
     }
+    retryBtn.addEventListener('click', fetchTracks);
+    window.addEventListener('focus', () => {
+        if (!tracks.length) fetchTracks();
+    });
 
     /** Drag to move, corner to scale. The player sits over the top-right of
      *  every page and used to cover whatever was underneath it.

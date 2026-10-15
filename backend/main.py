@@ -31,7 +31,7 @@ from core.paths import PROJECT_ROOT
 from harness.session.manager import reset_running_sessions
 from models.migrations import init_database
 from routers import api_router
-from services.feed_service import has_cached_feeds, refresh_all, start_scheduler
+from services.feed_service import has_cached_feeds, refresh_all, start_scheduler, stop_refreshes
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -68,6 +68,7 @@ async def lifespan(app: FastAPI):
     finally:
         from routers.harness import stop_turns
         await stop_turns()
+        await stop_refreshes()
         if scheduler:
             scheduler.shutdown(wait=False)
         runtime_lock.close()

@@ -35,6 +35,7 @@ def main():
         commands.update({
             'syntax':[sys.executable,__file__,'--syntax-only'],
             'config':[sys.executable,'tools/config_check.py'],
+            'feeds':[sys.executable,'tools/check_feeds.py','--offline'],
             'web':[sys.executable,'tools/web_check.py'],
             'agent':[sys.executable,'tools/agent_http_check.py'],
             'backup':[sys.executable,'tools/backup_check.py'],

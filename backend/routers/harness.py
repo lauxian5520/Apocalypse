@@ -11,11 +11,11 @@ import zipfile
 from typing import AsyncIterator
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from core.config import get_settings
-from core.deps import require_user
+from core.deps import require_harness_user
 from core.errors import AppError, NotFoundError, ValidationError
 from core.sse import SSE_DONE, SSE_HEADERS, sse
 from harness import agents, build_context, resume_turn, run_turn, skills
@@ -44,19 +44,6 @@ settings = get_settings()
 MAX_MESSAGE_CHARS = 20000
 MAX_WORKSPACE_LISTING = 200
 _turn_tasks: dict[str, asyncio.Task] = {}
-
-
-def require_harness_user(user: User = Depends(require_user)) -> User:
-    """Auth for every harness endpoint.
-
-    The agent can run commands, so who reaches it is a deployment decision, not
-    a code one. Both gates default to the restrictive setting.
-    """
-    if not settings.harness_enabled:
-        raise HTTPException(status_code=404, detail="Harness 未启用")
-    if settings.harness_require_admin and user.role != "admin":
-        raise HTTPException(status_code=403, detail="Harness 仅限管理员使用")
-    return user
 
 
 # ── sessions ─────────────────────────────────────────────────────

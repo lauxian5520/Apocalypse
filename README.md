@@ -71,6 +71,8 @@
 
 数据来自会议官方目录、CVF、ECVA、ACL Anthology 和 PMLR 等论文集。年份选项从 2020 年起，ICCV 使用奇数年、ECCV 使用偶数年；尚未发布的目录可能暂无论文。按会议和年份缓存 6 小时，获取失败时可回退到已有缓存并提示。研究领域按标题、官方主题与关键词归类，同一论文可属于多个领域。
 
+项目、模型与论文在缓存缺失或过期时自动后台同步，抓取失败保留上次成功内容并提示状态。Hugging Face 使用[官方论文接口](https://huggingface.co/docs/huggingface_hub/en/package_reference/hf_api#huggingface_hub.HfApi.list_daily_papers)的最新一期、周及月查询；近半年合并月榜，避免逐日批量请求。新闻默认每 15 分钟同步，按来源发布时间保留近 72 小时内容，并在卡片中显示日期；缺少可靠日期的旧榜单不作为实时新闻展示。播放器在空曲库或加载失败时仍可见，并提供刷新入口；管理员可进入后台上传音乐。
+
 会议在 [conference_catalog.py](backend/scrapers/conference_catalog.py) 中统一注册，前端根据接口返回的目录生成选项；增加会议时可复用已有来源适配器，新的论文集格式需在 [conference_papers.py](backend/scrapers/conference_papers.py) 中补充解析。
 
 ### 综合实用工具与实时翻译
@@ -357,7 +359,7 @@ data/skills/pptx/                    ← 技能包
 
 | 层 | 措施 |
 |---|---|
-| 谁能用 | `HARNESS_REQUIRE_ADMIN=true`（默认）——只有管理员；生产通过 `python -m cli.users ... --admin` 创建初始管理员 |
+| 谁能用 | 按用户的 `can_use_harness` 独立授权；管理员在后台用户列表开通/关闭，普通用户无需成为管理员即可使用 |
 | 能不能执行命令 | `HARNESS_SHELL_ENABLED=false`（默认）——不打开就没有 `bash` 工具，生产配置拒绝开启 |
 | 命令边界 | argv 解析后执行，**从不经过 shell**；`data/shell_allowlist.json` 里的只读命令自动放行，`sudo`/`ssh`/`docker` 等直接拒绝，**其余一律转人工审批**——包括 `python`、`node`、`git`、`curl`、`find`、`awk`，因为它们能执行任意代码或联网 |
 | 文件边界 | 每个会话独占 `var/harness/workspaces/{id}/`，所有路径过 `contained_path()`（与图片上传共用同一份检查），`..`、绝对路径、指向外部的软链接全部拒绝 |
@@ -487,7 +489,7 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml up --build
 docker compose -f docker-compose.yml -f docker-compose.production.yml exec backend python -m cli.users admin admin@example.com --admin
 ```
 
-生产配置启用 Secure Cookie、默认关闭公开注册、保持 Harness 管理员专用并关闭 Shell；弱配置会拒绝启动。单个后端进程配合 SQLite，Nginx 提供 HTTPS、限流与 SSE 转发。部署配置和证书准备步骤见 [部署说明](docs/DELIVERY.md)。
+生产配置启用 Secure Cookie、默认关闭公开注册、按用户授权 Harness 并关闭 Shell；弱配置会拒绝启动。单个后端进程配合 SQLite，Nginx 提供 HTTPS、限流与 SSE 转发。部署配置和证书准备步骤见 [部署说明](docs/DELIVERY.md)。
 
 备份前停止后端写入，使用 `python tools/backup.py create` 生成 SQLite 快照与文件归档；恢复默认拒绝非空目录并校验完整性。不要直接复制仍在写入的 SQLite 文件。命令、保留策略和匹配版本回滚步骤见 [备份与恢复](docs/DELIVERY.md#备份恢复与回滚)。
 
@@ -499,6 +501,11 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml exec backe
 | `REGISTRATION_ENABLED` | 是否允许公开注册；生产默认关闭 | `false`（生产） |
 | `PRICING_FILE` | 自定义完整模型价目表 JSON，留空使用内置表 | 空 |
 | `FEEDS_ENABLED` | 是否启动信息源抓取任务 | `true` |
+| `FEEDS_CACHE_TTL_MINUTES` | 项目、模型及论文缓存时长；缺失/过期时自动后台刷新 | `360` |
+| `FOCUS_CACHE_TTL_MINUTES` | 新闻缓存及定时刷新间隔（分钟） | `15` |
+| `FOCUS_MAX_AGE_HOURS` | 新闻发布时间距今的最长小时数；没有可核实日期的条目不展示 | `72` |
+| `FEEDS_RETRY_SECONDS` | 抓取失败后的重试等待；保留成功缓存及其原更新时间 | `300` |
+| `FEEDS_INITIAL_WAIT_SECONDS` | 无缓存时页面请求最多等待的秒数，之后显示同步状态并自动重试 | `3` |
 | `HARNESS_WRITE_APPROVAL` | 工作区写入是否必须人工批准 | `true` |
 | `HARNESS_AUTO_TITLE` | 是否自动生成会话标题 | `true` |
 | `VAR_DIR` | 运行时数据根目录，一个开关搬走全部状态 | `./var` |
@@ -512,7 +519,7 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml exec backe
 | `ALLOWED_ORIGINS` | CORS 白名单 | `http://localhost:8000` |
 | `DEV_RELOAD` | 热重载，**仅本地开发** | `false` |
 | `HARNESS_ENABLED` | 是否提供 Harness 工作台 | `true` |
-| `HARNESS_REQUIRE_ADMIN` | Harness 仅管理员可用，公网部署保持 `true` | `true` |
+| Harness 使用权限 | 由后台逐用户设置并存入 `users.can_use_harness`；不再使用 `HARNESS_REQUIRE_ADMIN` 环境变量 | 新普通用户默认关闭 |
 | `HARNESS_SHELL_ENABLED` | 是否给 Agent `bash` 工具（读完安全模型再开） | `false` |
 | `HARNESS_SHELL_TIMEOUT_SECONDS` | 单条命令的墙钟上限，超时杀整个进程组 | `30` |
 | `HARNESS_SHELL_MAX_OUTPUT_BYTES` | 单条命令回给模型的输出上限（stdout / stderr 各自计），超出截断 | `32768` |
@@ -552,7 +559,11 @@ ZHIPU_MODEL=glm-4.7-flash
 1. 用管理员 CLI 创建初始管理员及受邀账号；生产默认关闭 `/register.html` 公开注册。
 2. 登录后可发布公开或私密笔记；私密正文、评论、图片与附件仅作者和管理员可见，界面显示“作者和管理员可见”。
 3. 私聊及其附件仅通信双方可访问，管理员不会自动获得访问权；无法关联到数据库记录的上传文件默认拒绝访问。
-4. 管理员在 `/admin.html` 管理账号及音乐；现有 Provider 配置生效后可使用 AI 和 `/harness.html` 工作台。
+4. 管理员在 `/admin.html` 管理账号及音乐，并在用户列表的「Harness 使用权限」列逐人授权；现有 Provider 配置生效后，获授权用户可使用 `/harness.html` 工作台。
+
+升级时，服务启动会自动给用户表增加 `can_use_harness` 列，并仅在新增该列时为已有管理员保留 Harness 权限。新普通账号默认关闭；首个注册管理员和 CLI 创建的管理员默认开启。之后切换管理员身份不会改变 Harness 权限，关闭权限也不会因重启而恢复。旧版 `HARNESS_REQUIRE_ADMIN` 不再生效，所有 Harness 接口始终检查此列。此前只为使用 Harness 而提升的账号，可先确认 Harness 权限已开启，再将身份切回普通用户。
+
+登录后点击右上角头像进入自己的资料页，可保存新用户名；去除首尾空白后须为 1–50 个字符且不能重名。改名后使用新用户名登录，账号 ID、已有内容和当前登录会话保持关联。
 
 ## 🔑 API 文档
 

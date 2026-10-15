@@ -6,7 +6,10 @@ import httpx
 import xml.etree.ElementTree as ET
 import re
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+
+from core.config import get_settings
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -16,29 +19,51 @@ HEADERS = {
 }
 
 
+def _published_at(value: str | None) -> datetime | None:
+    """Read RSS RFC-822 and Atom ISO timestamps without discarding time zones."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        stamp = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+    except ValueError:
+        try:
+            stamp = parsedate_to_datetime(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(timezone.utc)
+
+
 def _parse_rss(xml_text: str, limit: int = 15) -> list[dict]:
-    """Parse RSS using Python built-in ElementTree (no extra deps)."""
+    """Preserve publication dates in RSS, RDF and namespaced Atom feeds."""
     items = []
     try:
-        # Strip XML namespaces then parse
-        clean = re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', xml_text)
-        clean = re.sub(r'<(\w+):\w+', r'<\1_ns', clean)
-        clean = re.sub(r'</(\w+):\w+>', r'</\1_ns>', clean)
-        root = ET.fromstring(clean)
-        channel = root.find('channel') or root
-        for item in list(channel.iter('item'))[:limit]:
-            title_el = item.find('title')
-            link_el = item.find('link')
-            title = (title_el.text or '').strip() if title_el is not None else ''
-            link = (link_el.text or '').strip() if link_el is not None else ''
-            if not link:
-                guid_el = item.find('guid')
-                link = (guid_el.text or '').strip() if guid_el is not None else ''
-            if title and len(title) > 5:
-                items.append({'title': title, 'url': link})
-    except Exception:
-        pass
-    return items
+        root = ET.fromstring(xml_text)
+        for entry in root.iter():
+            if entry.tag.rsplit('}', 1)[-1] not in ('item', 'entry'):
+                continue
+            fields = {child.tag.rsplit('}', 1)[-1]: child for child in entry}
+            title = fields.get('title')
+            link = fields.get('link')
+            url = (link.get('href') or link.text or '').strip() if link is not None else ''
+            for child in entry:
+                if child.tag.rsplit('}', 1)[-1] == 'link' and child.get('rel', 'alternate') == 'alternate':
+                    url = (child.get('href') or child.text or '').strip()
+                    break
+            stamp = None
+            for key in ('pubDate', 'published', 'date', 'updated'):
+                node = fields.get(key)
+                if node is not None:
+                    stamp = _published_at(node.text)
+                    if stamp:
+                        break
+            if title is not None and stamp:
+                items.append({'title': ''.join(title.itertext()).strip(), 'url': url,
+                              'published_at': stamp.isoformat()})
+    except ET.ParseError:
+        return []
+    return _clean_items(items, limit)
 
 
 async def _rss(url: str, limit: int = 15) -> list[dict]:
@@ -75,15 +100,8 @@ async def _fetch_oschina() -> list[dict]:
 
 
 async def _fetch_eastmoney() -> list[dict]:
-    """东方财富 — try multiple RSS endpoints"""
-    for url in [
-        "https://rss.eastmoney.com/kx.html",
-        "https://36kr.com/feed",
-    ]:
-        items = await _rss(url)
-        if items:
-            return items
-    return []
+    """东方财富; do not label another publisher's fallback as Eastmoney."""
+    return await _rss("https://rss.eastmoney.com/kx.html")
 
 
 async def _fetch_tophub_finance_batch() -> dict:
@@ -216,7 +234,7 @@ async def _fetch_sina_news() -> list[dict]:
 async def _fetch_google_news(query: str, limit: int = 15) -> list[dict]:
     """Google News RSS by query, useful as resilient fallback source."""
     from urllib.parse import quote
-    q = quote(query)
+    q = quote(f"{query} when:{get_settings().focus_max_age_hours}h")
     return await _rss(f"https://news.google.com/rss/search?q={q}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", limit=limit)
 
 
@@ -263,20 +281,34 @@ def _to_section(items: list[dict], section_name: str = "焦点要闻") -> list[d
 
 
 def _clean_items(items: list[dict], limit: int = 15) -> list[dict]:
+    """Omit old and unverifiable headlines rather than relabelling them as fresh."""
     out = []
     seen = set()
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=get_settings().focus_max_age_hours)
     for it in items or []:
         title = (it.get("title") or "").strip()
         url = (it.get("url") or "").strip()
-        if not title:
+        if not title or not url.startswith(('https://', 'http://')):
             continue
-        if not url:
-            url = "#"
+        stamp = _published_at(it.get('published_at'))
+        precision = it.get('date_precision', 'time')
+        if stamp is None:
+            match = re.search(r'/(20\d{2})[-/]?(\d{2})[-/]?(\d{2})(?:/|[_\.])', url)
+            if match:
+                try:
+                    stamp = datetime(*map(int, match.groups()), tzinfo=timezone.utc)
+                    precision = 'day'
+                except ValueError:
+                    pass
+        if stamp is None or not cutoff <= stamp <= now + timedelta(minutes=5):
+            continue
         k = title.lower()
         if k in seen:
             continue
         seen.add(k)
-        out.append({"title": title, "url": url})
+        out.append({"title": title, "url": url, "published_at": stamp.isoformat(),
+                    "date_precision": precision})
         if len(out) >= limit:
             break
     return out
@@ -322,7 +354,7 @@ async def fetch_categorized() -> dict:
      cnbeta, arxiv_ai, techcrunch, theverge, venturebeat_ai,
      reuters_world, bbc_world,
      gnews_fin, gnews_tech, gnews_ai, gnews_politics, gnews_policy, gnews_world_politics,
-     baidu, pengpai, sina, tophub_fin) = await asyncio.gather(
+     baidu, pengpai, sina, kr36) = await asyncio.gather(
         _fetch_ithome(),
         _fetch_eastmoney(),
         _fetch_huxiu(),
@@ -349,36 +381,17 @@ async def fetch_categorized() -> dict:
         _fetch_baidu_hot(),
         _fetch_pengpai(),
         _fetch_sina_news(),
-        _fetch_tophub_finance_batch(),
+        _rss("https://36kr.com/feed"),
         return_exceptions=True,
     )
 
     def s(r):
         return r if isinstance(r, list) else []
         
-    def st(r, target):
-        """Helper to extract a list of items from dict response for batch jobs"""
-        if isinstance(r, dict):
-            return r.get(target, [])
-        return []
-
     finance_sections = _compact_sections({
         "东方财富网": _to_section(s(eastmoney), "财经要闻"),
-        "同花顺财经": _to_section(st(tophub_fin, "同花顺财经"), "财经要闻"),
-        "第一财经": _to_section(st(tophub_fin, "第一财经"), "市场焦点"),
-        "雪球": _to_section(st(tophub_fin, "雪球"), "投资理财"),
-        "英为财情": _to_section(st(tophub_fin, "英为财情"), "全球市场"),
-        "金融界": _to_section(st(tophub_fin, "金融界"), "财经快讯"),
-        "华尔街见闻": _to_section(st(tophub_fin, "华尔街见闻"), "全球财经"),
-        "证券日报网": _to_section(st(tophub_fin, "证券日报网"), "资本市场"),
-        "格隆汇": _to_section(st(tophub_fin, "格隆汇"), "港股美股"),
-        "集思录": _to_section(st(tophub_fin, "集思录"), "低风险投资"),
-        "慧博投研资讯": _to_section(st(tophub_fin, "慧博投研资讯"), "行业研报"),
-        "美股市值": _to_section(st(tophub_fin, "美股市值"), "全球巨头"),
-        "澎湃新闻": _to_section(s(pengpai), "宏观经济"),
-        "36氪财经": _to_section(s(huxiu), "投融资与公司"),
-        "IT之家财经": _to_section(s(ithome), "科技财经"),
-        "知乎热榜": _to_section(s(zhihu), "热议话题"),
+        "36氪财经": _to_section(s(kr36), "投融资与公司"),
+        "虎嗅财经": _to_section(s(huxiu), "行业动态"),
         "Google财经": _to_section(s(gnews_fin), "聚合快讯"),
         "路透财经": _to_section(s(reuters_biz), "国际财经"),
     })
@@ -414,7 +427,8 @@ async def fetch_categorized() -> dict:
     })
 
     return {
-        "savedAt": datetime.utcnow().isoformat() + "Z",
+        "savedAt": datetime.now(timezone.utc).isoformat(),
+        "max_age_hours": get_settings().focus_max_age_hours,
         "categories": {
             "finance": {
                 "sections": finance_sections

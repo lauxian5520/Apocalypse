@@ -7,7 +7,7 @@ from core.errors import NotFoundError, ValidationError
 from core.security import hash_password, password_error
 from models.user import User
 from schemas.common import Page
-from schemas.user import AdminUserOut, ResetPasswordIn, UserRoleIn, UserStatusIn
+from schemas.user import AdminUserOut, ResetPasswordIn, UserHarnessPermissionIn, UserRoleIn, UserStatusIn
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -68,6 +68,20 @@ def update_user_role(
     target.role = body.role
     db.commit()
     return {"id": target.id, "role": target.role}
+
+
+@router.patch("/users/{user_id}/harness-permission")
+def update_user_harness_permission(
+    user_id: int,
+    body: UserHarnessPermissionIn,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, int | bool]:
+    """Grant or revoke Harness access without altering administrative authority."""
+    target = _get_target(db, user_id)
+    target.can_use_harness = body.can_use_harness
+    db.commit()
+    return {"id": target.id, "can_use_harness": target.can_use_harness}
 
 
 @router.patch("/users/{user_id}/status")

@@ -13,6 +13,7 @@
     const dom = {};
 
     const state = {
+        ready: false,
         sessionId: '',
         events: [],
         registry: null,
@@ -269,7 +270,7 @@
 
     async function send() {
         const text = dom.input.value.trim();
-        if (!text || state.running) return;
+        if (!state.ready || !text || state.running) return;
         if (creatingSession) await creatingSession;
         if (!state.sessionId) await newSession();
 
@@ -633,6 +634,8 @@
             interrupt: el('hs-interrupt'), delete: el('hs-delete'),
             usage: el('hs-usage'), tabBody: el('hs-tab-body'),
         });
+        dom.newBtn.disabled = true;
+        dom.send.disabled = true;
 
         // Make the three columns draggable. The sizes here are the CSS
         // defaults, so double-clicking a divider returns to the stylesheet's
@@ -674,6 +677,14 @@
         // with it and tells a logged-in user they are not.
         const user = window.Auth?.user?.() || await window.Auth?.init?.();
         if (!user) { window.Auth?.requireLogin?.(); return; }
+        if (!Auth.canUseHarness()) {
+            dom.title.textContent = 'Harness 使用权限未开通';
+            dom.subtitle.textContent = '请联系管理员开通 Harness 使用权限';
+            dom.conversation.innerHTML = '<div class="hs-empty">获得 Harness 使用权限后即可使用智能体工作台。</div>';
+            [dom.newBtn, dom.send, dom.delete, dom.interrupt, dom.input, dom.file, dom.search]
+                .forEach((node) => { node.disabled = true; });
+            return;
+        }
 
         dom.newBtn.addEventListener('click', () => newSession().catch((e) => toast(e.message, 'error')));
         dom.send.addEventListener('click', () => send().catch((e) => toast(e.message, 'error')));
@@ -717,5 +728,10 @@
         renderConversation();
         renderTab();
         await loadSessions().catch((e) => toast(e.message, 'error'));
+        // Initial rendering must finish before a streamed turn can append to
+        // the conversation; otherwise it can remove the live typing anchor.
+        state.ready = true;
+        dom.newBtn.disabled = false;
+        dom.send.disabled = false;
     });
 })();

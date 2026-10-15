@@ -58,6 +58,13 @@
     box-shadow: 0 0 12px rgba(108, 99, 255, 0.35);
 }
 
+.mp-circle:disabled { opacity: 0.4; cursor: not-allowed; }
+#mp-status, #mp-library { font-size: 0.75em; white-space: nowrap; }
+#mp-status { color: var(--text-2); }
+#mp-library { color: var(--accent-2); }
+#music-player[data-empty="true"] #mp-volume,
+#music-player[data-empty="true"] #mp-mute { display: none; }
+
 /* ── volume ─────────────────────────────────────────────────────── */
 /* The mute button is a normal .mp-circle; .mp-vol only marks the two
    controls that the floating-panel drag must ignore. */

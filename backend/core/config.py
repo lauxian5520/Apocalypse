@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from core.paths import DEFAULT_VAR_DIR, PROJECT_ROOT, resolve
@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     app_env: Literal["development", "production", "test"] = "development"
     registration_enabled: bool | None = None
     feeds_enabled: bool = True
+    feeds_cache_ttl_minutes: int = Field(360, ge=1)
+    focus_cache_ttl_minutes: int = Field(15, ge=1)
+    focus_max_age_hours: int = Field(72, ge=1)
+    feeds_retry_seconds: int = Field(300, ge=1)
+    feeds_initial_wait_seconds: float = Field(3, ge=0, le=30)
     pricing_file: str = ""
     harness_auto_title: bool = True
     harness_write_approval: bool = True
@@ -89,9 +94,8 @@ class Settings(BaseSettings):
     custom_model: str = ""
 
     # ── Harness ───────────────────────────────────────────────────
-    # The agent workbench. Defaults are the safe ones: admin-only, no shell.
+    # The agent workbench requires per-user permission; shell stays off by default.
     harness_enabled: bool = True
-    harness_require_admin: bool = True
     harness_preset: str = "standard"
     harness_model: str = ""              # blank follows the provider's own model
     harness_max_steps: int = 24
@@ -164,8 +168,8 @@ class Settings(BaseSettings):
                 raise ValueError("生产环境 JWT_SECRET 必须为至少 32 字符的随机密钥")
             if not self.cookie_secure:
                 raise ValueError("生产环境必须设置 COOKIE_SECURE=true")
-            if not self.harness_require_admin or self.harness_shell_enabled:
-                raise ValueError("生产环境要求 Harness 管理员专用且关闭 Shell")
+            if self.harness_shell_enabled:
+                raise ValueError("生产环境要求 Harness 关闭 Shell")
             if any(not Path(directory).is_relative_to(Path(self.var_dir)) for directory in self.runtime_dirs):
                 raise ValueError("生产运行目录必须位于 VAR_DIR 内，以保证完整备份")
             if not Path(self.sqlite_path).is_relative_to(Path(self.var_dir)):

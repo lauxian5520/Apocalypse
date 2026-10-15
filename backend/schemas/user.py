@@ -22,6 +22,7 @@ class AdminUserOut(ORMModel):
     avatar_url: str | None = None
     role: str
     is_disabled: bool
+    can_use_harness: bool
     created_at: datetime | None = None
 
 
@@ -31,6 +32,12 @@ class UserRoleIn(BaseModel):
 
 class UserStatusIn(BaseModel):
     is_disabled: bool
+
+
+class UserHarnessPermissionIn(BaseModel):
+    """Explicit Harness permission, separate from the administrator role."""
+
+    can_use_harness: bool
 
 
 class ResetPasswordIn(BaseModel):

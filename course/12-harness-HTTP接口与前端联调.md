@@ -10,10 +10,12 @@
 def require_harness_user(user = Depends(require_user)):
     if not settings.harness_enabled:
         raise NotFoundError(...)     # 404，不是 403 —— 直接隐藏这个功能存在过
-    if settings.harness_require_admin and user.role != "admin":
+    if not user.can_use_harness:
         raise PermissionError_(...)  # 403
     return user
 ```
+
+该依赖集中定义在 `core/deps.py`，每次请求读取用户当前的数据库权限。管理员在后台逐人开通或关闭 Harness，无需改变用户的管理员身份；旧版 `HARNESS_REQUIRE_ADMIN` 不再生效。
 
 值得注意的细节：**功能整体关闭时返回 404，而不是 403**。403 会告诉一个未授权的访问者
 "这个东西存在，只是你没权限"，404 则是"这里什么都没有"——如果部署方压根没打开 Harness

@@ -20,6 +20,7 @@ _ADDED_COLUMNS: dict[str, dict[str, str]] = {
     },
     "users": {
         "is_disabled": "BOOLEAN DEFAULT 0 NOT NULL",
+        "can_use_harness": "BOOLEAN DEFAULT FALSE NOT NULL",
     },
     "harness_sessions": {
         "parent_id": "VARCHAR(32)",
@@ -54,3 +55,7 @@ def init_database() -> None:
             logger.info("[migrate] %s: adding column %s", table, column)
             with engine.begin() as conn:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
+                if table == "users" and column == "can_use_harness":
+                    # Preserve existing admins' access once. Later restarts must
+                    # respect an explicit revocation, including for admins.
+                    conn.execute(text("UPDATE users SET can_use_harness = TRUE WHERE role = 'admin'"))

@@ -33,6 +33,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             toggleStatus(uid, !currentDisabled);
             return;
         }
+        if (btn.classList.contains('js-toggle-harness')) {
+            toggleHarnessPermission(uid, btn.dataset.allowed !== '1', btn);
+            return;
+        }
         if (btn.classList.contains('js-reset-password')) {
             resetUserPassword(uid);
             return;
@@ -120,21 +124,22 @@ async function triggerRefresh() {
 async function loadUsers() {
     const tbody = document.getElementById('users-tbody');
     const kw = (document.getElementById('user-keyword')?.value || '').trim();
-    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-2)">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="color:var(--text-2)">加载中...</td></tr>';
     try {
         const ret = await apiFetch(`/admin/users?page=1&page_size=100&keyword=${encodeURIComponent(kw)}`);
         const users = ret.items || [];
         if (!users.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-2)">暂无用户</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="color:var(--text-2)">暂无用户</td></tr>';
             return;
         }
         tbody.innerHTML = users.map(u => `
           <tr>
-            <td><img src="${u.avatar_url || 'assets/images/default-avatar.svg'}" alt="头像"></td>
+            <td><img src="${escHtml(u.avatar_url || 'assets/images/default-avatar.svg')}" alt="头像"></td>
             <td>${u.id}</td>
-            <td>${u.username}</td>
-            <td>${u.email}</td>
+            <td>${escHtml(u.username)}</td>
+            <td>${escHtml(u.email)}</td>
             <td><span class="role-badge ${u.role === 'admin' ? 'role-admin' : 'role-user'}">${u.role === 'admin' ? '管理员' : '普通用户'}</span></td>
+            <td><button type="button" class="btn btn-sm js-toggle-harness" data-uid="${u.id}" data-allowed="${u.can_use_harness ? '1' : '0'}" aria-pressed="${u.can_use_harness ? 'true' : 'false'}" aria-label="${escHtml(u.username)} 的 Harness 使用权限">${u.can_use_harness ? '已开启 · 关闭' : '未开启 · 开通'}</button></td>
             <td>${u.is_disabled ? '<span style="color:#ff8d8d">已禁用</span>' : '<span style="color:#8df7c6">正常</span>'}</td>
             <td>
                                     <button class="btn btn-sm js-toggle-role" data-uid="${u.id}" data-role="${u.role}">切换身份</button>
@@ -145,7 +150,25 @@ async function loadUsers() {
           </tr>
         `).join('');
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="7" style="color:#ff8d8d">加载失败: ${escHtml(e.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="color:#ff8d8d">加载失败: ${escHtml(e.message)}</td></tr>`;
+    }
+}
+
+async function toggleHarnessPermission(userId, canUseHarness, button) {
+    button.disabled = true;
+    try {
+        await apiFetch(`/admin/users/${userId}/harness-permission`, {
+            method: 'PATCH', body: JSON.stringify({ can_use_harness: canUseHarness }),
+        });
+        if (userId === Auth.user()?.id) {
+            Auth.set(null, { ...Auth.user(), can_use_harness: canUseHarness });
+        }
+        toast(canUseHarness ? 'Harness 使用权限已开通' : 'Harness 使用权限已关闭', 'success');
+        await loadUsers();
+    } catch (e) {
+        toast(e.message, 'error');
+    } finally {
+        button.disabled = false;
     }
 }
 

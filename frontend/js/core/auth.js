@@ -27,6 +27,10 @@ const Auth = {
     return (this._user || {}).role === 'admin';
   },
 
+  canUseHarness() {
+    return this._user?.can_use_harness === true;
+  },
+
   /** Read the double-submit CSRF value the server set alongside the JWT. */
   csrfToken() {
     const parts = (document.cookie || '').split(';').map(s => s.trim());
