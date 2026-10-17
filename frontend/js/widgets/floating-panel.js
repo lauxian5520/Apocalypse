@@ -137,7 +137,6 @@
         height: r.height,
         active: false,
       };
-      grip.setPointerCapture?.(e.pointerId);
     }
 
     function onPointerMove(e) {
@@ -148,6 +147,9 @@
       if (!drag.active) {
         if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
         drag.active = true;
+        // Capturing on pointerdown retargets even a stationary button click
+        // to the grip. Capture only after this gesture becomes a drag.
+        grip.setPointerCapture?.(e.pointerId);
         state.moved = true;
         anchorTopLeft(el);
         el.classList.add('fp-dragging');
@@ -165,7 +167,9 @@
     function onPointerUp(e) {
       if (!drag || e.pointerId !== drag.pointerId) return;
       const wasDragging = drag.active;
-      grip.releasePointerCapture?.(e.pointerId);
+      if (grip.hasPointerCapture?.(e.pointerId)) {
+        grip.releasePointerCapture(e.pointerId);
+      }
       drag = null;
       el.classList.remove('fp-dragging');
       document.body.classList.remove('fp-drag-active');
@@ -181,9 +185,11 @@
     }
 
     grip.addEventListener('pointerdown', onPointerDown);
-    grip.addEventListener('pointermove', onPointerMove);
-    grip.addEventListener('pointerup', onPointerUp);
-    grip.addEventListener('pointercancel', onPointerUp);
+    // Watch the window until capture starts so fast movements beyond the
+    // grip still activate dragging, and releasing outside clears the gesture.
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
     grip.classList.add('fp-grip');
 
     // ── resize ───────────────────────────────────────────────────

@@ -6,6 +6,7 @@
     let tracks = [], currentIdx = 0, audio = new Audio();
     let fetchingTracks = false;
     let pendingAutoplay = false;
+    let playbackAttempt = 0;
     let lastSaveAt = 0;
 
     // Build player HTML
@@ -102,37 +103,55 @@
 
     async function tryStartPlayback() {
         if (!tracks.length) return false;
+        const attempt = ++playbackAttempt;
+        pendingAutoplay = false;
         try {
             await audio.play();
+            if (attempt !== playbackAttempt) return false;
             playBtn.textContent = '⏸';
-            pendingAutoplay = false;
+            status.hidden = true;
             saveState(true);
             return true;
-        } catch (_) {
+        } catch (error) {
+            if (attempt !== playbackAttempt) return false;
             playBtn.textContent = '▶';
-            pendingAutoplay = true;
+            pendingAutoplay = error.name === 'NotAllowedError';
+            if (pendingAutoplay) {
+                status.textContent = '点击播放音乐';
+                status.hidden = false;
+            } else if (error.name !== 'AbortError') {
+                status.textContent = '音乐播放失败，请重试或切换曲目';
+                status.hidden = false;
+            }
             return false;
         }
     }
 
     function bindAutoplayUnlock() {
-        const unlock = async () => {
-            if (!pendingAutoplay) return;
-            const ok = await tryStartPlayback();
-            if (!ok) return;
-            window.removeEventListener('click', unlock, true);
-            window.removeEventListener('keydown', unlock, true);
-            window.removeEventListener('touchstart', unlock, true);
+        const unlock = (event) => {
+            // The player's own controls handle their gesture. Starting here
+            // first makes the play button immediately pause that same audio.
+            if (!pendingAutoplay || player.contains(event.target)) return;
+            tryStartPlayback();
         };
         window.addEventListener('click', unlock, true);
         window.addEventListener('keydown', unlock, true);
-        window.addEventListener('touchstart', unlock, true);
+    }
+
+    function pausePlayback() {
+        ++playbackAttempt;
+        pendingAutoplay = false;
+        audio.pause();
+        playBtn.textContent = '▶';
+        saveState(true);
     }
 
     function loadTrack(idx, options) {
         if (!tracks.length) return;
         const { autoplay = true, resumeTime = 0 } = options || {};
         const t = tracks[idx];
+        ++playbackAttempt;
+        pendingAutoplay = false;
         audio.src = t.url;
         player.title = `正在播放：${t.title || '未知标题'}${t.artist ? ` - ${t.artist}` : ''}`;
 
@@ -145,9 +164,7 @@
         if (autoplay) {
             tryStartPlayback();
         } else {
-            audio.pause();
-            playBtn.textContent = '▶';
-            saveState(true);
+            pausePlayback();
         }
     }
 
@@ -156,8 +173,7 @@
         if (audio.paused) {
             tryStartPlayback();
         } else {
-            audio.pause(); playBtn.textContent = '▶';
-            saveState(true);
+            pausePlayback();
         }
     }
 
@@ -170,6 +186,13 @@
     });
     audio.addEventListener('pause', () => saveState(true));
     audio.addEventListener('play', () => saveState(true));
+    audio.addEventListener('error', () => {
+        ++playbackAttempt;
+        pendingAutoplay = false;
+        playBtn.textContent = '▶';
+        status.textContent = '音乐播放失败，请重试或切换曲目';
+        status.hidden = false;
+    });
 
     playBtn.addEventListener('click', playPause);
     document.getElementById('mp-prev').addEventListener('click', () => {
@@ -232,8 +255,7 @@
                     playBtn.textContent = '▶';
                 }
             } else {
-                audio.pause();
-                pendingAutoplay = false;
+                pausePlayback();
                 currentIdx = 0;
                 status.textContent = '暂无音乐';
                 player.title = '暂无音乐，可由管理员在后台上传曲目';
