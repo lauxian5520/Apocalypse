@@ -69,9 +69,9 @@
 
 在“前沿论文”栏切换到“顶会论文”，按会议、年份和研究领域筛选，或搜索标题及作者。当前收录 **ICLR、ICML、NeurIPS（NIPS）、AAAI、IJCAI、CVPR、ICCV、ECCV、ACL、EMNLP、NAACL、AISTATS、UAI、COLT、CoRL**，覆盖机器学习、计算机视觉、自然语言处理与机器人等方向。
 
-数据来自会议官方目录、CVF、ECVA、ACL Anthology 和 PMLR 等论文集。年份选项从 2020 年起，ICCV 使用奇数年、ECCV 使用偶数年；尚未发布的目录可能暂无论文。按会议和年份缓存 6 小时，获取失败时可回退到已有缓存并提示。研究领域按标题、官方主题与关键词归类，同一论文可属于多个领域。
+数据来自会议官方目录、CVF、ECVA、ACL Anthology 和 PMLR 等论文集。年份选项从 2020 年起，ICCV 使用奇数年、ECCV 使用偶数年；尚未发布的目录可能暂无论文。按会议和年份缓存 6 小时，已访问的目录也会随后台任务定时更新，无需每天打开页面；获取失败时可回退到已有缓存并提示。研究领域按标题、官方主题与关键词归类，同一论文可属于多个领域。
 
-项目、模型与论文在缓存缺失或过期时自动后台同步，抓取失败保留上次成功内容并提示状态。Hugging Face 使用[官方论文接口](https://huggingface.co/docs/huggingface_hub/en/package_reference/hf_api#huggingface_hub.HfApi.list_daily_papers)的最新一期、周及月查询；近半年合并月榜，避免逐日批量请求。新闻默认每 15 分钟同步，按来源发布时间保留近 72 小时内容，并在卡片中显示日期；缺少可靠日期的旧榜单不作为实时新闻展示。播放器在空曲库或加载失败时仍可见，并提供刷新入口；管理员可进入后台上传音乐。
+项目、模型与论文默认每 6 小时自动后台同步（`FEEDS_ENABLED=true`，`FEEDS_CACHE_TTL_MINUTES=360`），缓存缺失或过期时访问页面也会触发同步，抓取失败保留上次成功内容并提示状态。Hugging Face 使用[官方论文接口](https://huggingface.co/docs/huggingface_hub/en/package_reference/hf_api#huggingface_hub.HfApi.list_daily_papers)的最新一期、周及月查询；近半年合并月榜，避免逐日批量请求。新闻默认每 15 分钟同步，按来源发布时间保留近 72 小时内容，并在卡片中显示日期；缺少可靠日期的旧榜单不作为实时新闻展示。播放器在空曲库或加载失败时仍可见，并提供刷新入口；管理员可进入后台上传音乐。
 
 会议在 [conference_catalog.py](backend/scrapers/conference_catalog.py) 中统一注册，前端根据接口返回的目录生成选项；增加会议时可复用已有来源适配器，新的论文集格式需在 [conference_papers.py](backend/scrapers/conference_papers.py) 中补充解析。
 

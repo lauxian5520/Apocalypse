@@ -22,7 +22,7 @@ async def check_offline() -> None:
     import httpx
     from core.config import Settings
     from scrapers import hf_papers, tophub
-    from services import classify_service, feed_service as feeds
+    from services import classify_service, conference_service, feed_service as feeds
 
     with tempfile.TemporaryDirectory() as tmp:
         settings = Settings(_env_file=None, app_env='test', feeds_dir=tmp,
@@ -121,9 +121,51 @@ async def check_offline() -> None:
                         assert 'week' in queries[0]
                     else:
                         assert 'month' in queries[0]
+            print('PASS latest issue, official week/month queries, bounded half-year queries and vote counts')
+
+            # Run the registered periodic callback without opening a paper page.
+            stale = {'updated_at': '2020-01-01T00:00:00+00:00', 'data': [{'title': 'previous directory'}]}
+            for venue in ('iclr', 'acl', 'icml'):
+                feeds._write_json(f'conference_{venue}_2025', stale)
+            feeds._write_json('conference_iclr_2025', {**stale, 'updated_at': 'invalid'})
+            feeds._save('conference_cvpr_2025', [{'title': 'fresh directory'}])
+            for name in ('conference_unknown_2025', 'conference_eccv_2025',
+                         'conference_iclr_invalid', 'conference_iclr_9999'):
+                feeds._write_json(name, stale)
+
+            async def proceedings(venue, year):
+                assert year == 2025
+                if venue == 'acl':
+                    raise httpx.ConnectError('fixture outage')
+                return [] if venue == 'icml' else [{'title': 'updated directory'}]
+
+            fetch = AsyncMock(side_effect=proceedings)
+            with patch.object(conference_service, 'fetch', fetch), \
+                    patch.object(feeds, 'refresh_github', AsyncMock()), \
+                    patch.object(feeds, 'refresh_huggingface', AsyncMock()), \
+                    patch.object(feeds, 'refresh_focus', AsyncMock()), \
+                    patch.object(feeds, 'refresh_papers', AsyncMock()):
+                scheduler = feeds.start_scheduler()
+                try:
+                    job = scheduler.get_job('refresh_all')
+                    assert job.trigger.interval.total_seconds() == settings.feeds_cache_ttl_minutes * 60
+                    assert job.func == feeds.refresh_all
+                    await asyncio.gather(job.func(), job.func())
+                finally:
+                    scheduler.shutdown(wait=False)
+                assert {call.args for call in fetch.await_args_list} == {
+                    ('iclr', 2025), ('acl', 2025), ('icml', 2025)}
+                assert fetch.await_count == 3, 'Concurrent refreshes must share conference work'
+                assert feeds._load('conference_iclr_2025')['data'] == [{'title': 'updated directory'}]
+                assert feeds._load('conference_acl_2025') == stale, 'An outage must retain the successful cache'
+                assert feeds._load('conference_icml_2025')['data'] == []
+                assert feeds._load('conference_icml_2025')['updated_at'] != stale['updated_at']
+                fetch.reset_mock()
+                await feeds.refresh_all()
+                fetch.assert_awaited_once_with('acl', 2025)
+            print('PASS scheduled conference refresh without page visits, invalid timestamps, shared work, fresh/empty caches and outage isolation')
             await feeds.stop_refreshes()
             feeds._failures.clear()
-            print('PASS latest issue, official week/month queries, bounded half-year queries and vote counts')
 
 
 async def main() -> None:

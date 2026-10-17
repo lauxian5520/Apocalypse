@@ -2,9 +2,11 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 from scrapers.conference_papers import AREAS, CONFERENCES, fetch
 from scrapers.conference_catalog import conference_catalog, held_in_year
+from services import feed_service
 from services.feed_service import _load, _save
 
 logger = logging.getLogger(__name__)
@@ -20,7 +22,11 @@ async def _conference(venue: str, year: int) -> tuple[list, str | None, str | No
         name = f'conference_{venue}_{year}'
         cached = _load(name)
         updated = cached.get('updated_at')
-        if updated and (datetime.now(timezone.utc) - datetime.fromisoformat(updated)).total_seconds() < TTL_SECONDS:
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(updated)).total_seconds()
+        except (TypeError, ValueError):
+            age = TTL_SECONDS
+        if 0 <= age < TTL_SECONDS:
             return cached['data'], updated, None
         try:
             async with _fetch_slots:
@@ -34,6 +40,19 @@ async def _conference(venue: str, year: int) -> tuple[list, str | None, str | No
             if cached.get('data'):
                 warning += '，正在显示上次缓存'
             return cached.get('data') or [], updated, warning
+
+
+async def refresh_cached_papers() -> None:
+    """Keep previously requested conference directories fresh without page visits."""
+    directories = []
+    current_year = datetime.now(timezone.utc).year
+    for path in Path(feed_service.settings.feeds_dir).glob('conference_*_*.json'):
+        venue, _, year_text = path.stem.removeprefix('conference_').rpartition('_')
+        if venue in CONFERENCES and year_text.isdigit():
+            year = int(year_text)
+            if 2020 <= year <= current_year and held_in_year(venue, year):
+                directories.append(_conference(venue, year))
+    await asyncio.gather(*directories)
 
 
 async def get_papers(venue: str, year: int, area: str, query: str, offset: int, limit: int) -> dict:

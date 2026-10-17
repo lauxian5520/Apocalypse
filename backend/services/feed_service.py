@@ -224,8 +224,12 @@ async def refresh_focus_job() -> None:
 
 async def refresh_all() -> None:
     """Do not let one unavailable source stop other feed updates."""
+    # Imported here because conference caches share this module's storage helpers.
+    from services.conference_service import refresh_cached_papers
+
     tasks = [_start_refresh(f"github_{p}", lambda p=p: refresh_github(p)) for p in PERIODS[:3]]
     tasks.extend([_start_refresh("huggingface", refresh_huggingface),
+                  _start_refresh("conference_papers", refresh_cached_papers),
                   _start_refresh("focus", refresh_focus), asyncio.create_task(refresh_papers())])
     await asyncio.gather(*tasks)
 

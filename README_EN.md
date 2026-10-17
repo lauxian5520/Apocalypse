@@ -43,7 +43,7 @@ Search note bodies from the Notes page. Results update as you type; press Enter 
 
 The Papers page combines Hugging Face Daily Papers, arXiv, and official proceedings from **15 conferences: ICLR, ICML, NeurIPS (NIPS), AAAI, IJCAI, CVPR, ICCV, ECCV, ACL, EMNLP, NAACL, AISTATS, UAI, COLT, and CoRL**. Select Conference Papers to filter by conference, year, and research area, or search titles and authors.
 
-Sources include official conference directories, CVF, ECVA, ACL Anthology, and PMLR. Year choices start at 2020, with odd years for ICCV and even years for ECCV; unpublished proceedings may have no papers yet. Results are cached by conference and year for six hours, with existing cached data and a warning returned when a source fails. Area labels come from titles, official topics, and keywords; a paper can belong to multiple areas.
+Sources include official conference directories, CVF, ECVA, ACL Anthology, and PMLR. Year choices start at 2020, with odd years for ICCV and even years for ECCV; unpublished proceedings may have no papers yet. Results are cached by conference and year for six hours. Previously requested directories also refresh in the background, alongside Hugging Face and arXiv papers, every six hours by default (`FEEDS_ENABLED=true`, `FEEDS_CACHE_TTL_MINUTES=360`). Existing cached data and a warning are returned when a source fails. Area labels come from titles, official topics, and keywords; a paper can belong to multiple areas.
 
 The shared [conference registry](backend/scrapers/conference_catalog.py) supplies the frontend's options. Additional conferences can reuse an existing source adapter; new proceedings formats need a parser in [conference_papers.py](backend/scrapers/conference_papers.py).
 
