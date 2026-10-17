@@ -163,7 +163,7 @@ def browser_checks(base):
                 search.evaluate("el => { el.value='中文'; el.dispatchEvent(new CompositionEvent('compositionend')); }")
                 expect(status).to_have_text('共找到 1 条匹配笔记')
 
-                page.locator('#memo-filter').select_option('private')
+                page.locator('.feed-tab[data-visibility="private"]').click()
                 expect(status).to_contain_text('加载失败')
                 expect(cards).to_have_count(0)
                 response = context.request.post(base + '/api/auth/login', data={'username': 'owner', 'password': PASSWORD})
@@ -171,7 +171,7 @@ def browser_checks(base):
                 page.reload()
                 expect(cards).to_have_count(10)
                 search.fill('机密')
-                page.locator('#memo-filter').select_option('private')
+                page.locator('.feed-tab[data-visibility="private"]').click()
                 expect(status).to_have_text('共找到 1 条匹配笔记')
                 expect(cards).to_contain_text('机密 Keyword owner')
                 assert '机密 Keyword other' not in cards.inner_text()
@@ -179,6 +179,7 @@ def browser_checks(base):
                 output = ROOT / 'artifacts' / 'features'
                 output.mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(output / f'memo-search-{width}.png'))
+                cards.locator('.memo-menu summary').click()
                 page.once('dialog', lambda dialog: dialog.accept())
                 cards.locator('.memo-del-btn').click()
                 expect(status).to_have_text('共找到 0 条匹配笔记')

@@ -27,8 +27,12 @@ class Memo(Base):
     # Relationships
     author: Mapped["User"] = relationship("User", back_populates="memos")  # noqa: F821
     attachments: Mapped[list["Attachment"]] = relationship(  # noqa: F821
-        "Attachment", back_populates="memo", cascade="all, delete-orphan"
+        "Attachment", back_populates="memo", cascade="all, delete-orphan", order_by="Attachment.id"
     )
     comments: Mapped[list["Comment"]] = relationship(  # noqa: F821
         "Comment", back_populates="memo", cascade="all, delete-orphan", order_by="Comment.created_at"
+    )
+    likes: Mapped[list["MemoLike"]] = relationship(  # noqa: F821
+        "MemoLike", back_populates="memo", cascade="all, delete-orphan",
+        order_by="(MemoLike.created_at, MemoLike.user_id)",
     )

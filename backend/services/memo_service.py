@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session, selectinload
 from core.errors import NotFoundError, PermissionError_
 from models.comment import Comment
 from models.memo import Memo
+from models.memo_like import MemoLike
 from models.user import User
 from schemas.comment import CommentOut
 from schemas.common import AuthorOut
-from schemas.memo import AttachmentOut, MemoOut
+from schemas.memo import AttachmentOut, MemoLikesOut, MemoOut
 
 ANONYMOUS_AUTHOR = AuthorOut(id=None, username="匿名用户", avatar_url=None)
 
@@ -26,6 +27,7 @@ def _with_relations(query):
         selectinload(Memo.author),
         selectinload(Memo.attachments),
         selectinload(Memo.comments).selectinload(Comment.author),
+        selectinload(Memo.likes).selectinload(MemoLike.user),
     )
 
 
@@ -82,6 +84,15 @@ def can_modify(memo: Memo, user: User) -> bool:
     return memo.user_id == user.id or user.role == "admin"
 
 
+def likes_out(memo: Memo, viewer: User | None = None) -> MemoLikesOut:
+    return MemoLikesOut(
+        likes=[AuthorOut(id=like.user.id, username=like.user.username,
+                         avatar_url=like.user.avatar_url) for like in memo.likes],
+        like_count=len(memo.likes),
+        liked_by_me=bool(viewer and any(like.user_id == viewer.id for like in memo.likes)),
+    )
+
+
 def to_out(memo: Memo, viewer: User | None = None) -> MemoOut:
     """Project a Memo for `viewer`, hiding the author of anonymous posts."""
     if can_see_author(memo, viewer):
@@ -113,6 +124,7 @@ def to_out(memo: Memo, viewer: User | None = None) -> MemoOut:
     ]
 
     return MemoOut(
+        **likes_out(memo, viewer).model_dump(),
         id=memo.id,
         user_id=user_id,
         author=author,

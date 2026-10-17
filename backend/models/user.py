@@ -31,6 +31,9 @@ class User(Base):
     comments: Mapped[list["Comment"]] = relationship(  # noqa: F821
         "Comment", back_populates="author", cascade="all, delete-orphan"
     )
+    memo_likes: Mapped[list["MemoLike"]] = relationship(  # noqa: F821
+        "MemoLike", back_populates="user", cascade="all, delete-orphan"
+    )
     sent_messages: Mapped[list["Message"]] = relationship(  # noqa: F821
         "Message", back_populates="sender", cascade="all, delete-orphan", foreign_keys="Message.sender_id"
     )

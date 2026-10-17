@@ -8,11 +8,12 @@ from models.attachment import Attachment
 from models.comment import Comment
 from models.harness import HarnessEvent, HarnessSession
 from models.memo import Memo
+from models.memo_like import MemoLike
 from models.message import Message
 from models.music import Music
 from models.user import User
 
 __all__ = [
-    "Base", "User", "Memo", "Attachment", "Comment", "Music", "Message",
+    "Base", "User", "Memo", "MemoLike", "Attachment", "Comment", "Music", "Message",
     "HarnessSession", "HarnessEvent",
 ]

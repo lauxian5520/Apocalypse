@@ -37,6 +37,7 @@ def main():
             'config':[sys.executable,'tools/config_check.py'],
             'feeds':[sys.executable,'tools/check_feeds.py','--offline'],
             'web':[sys.executable,'tools/web_check.py'],
+            'memo-interactions':[sys.executable,'tools/memo_interactions_check.py'],
             'agent':[sys.executable,'tools/agent_http_check.py'],
             'backup':[sys.executable,'tools/backup_check.py'],
             'harness':[sys.executable,'tools/harness_check.py','--offline'],

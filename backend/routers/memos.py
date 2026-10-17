@@ -1,19 +1,28 @@
 """Memo CRUD."""
+import json
+import logging
 from typing import Literal
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError as SchemaValidationError
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.datastructures import UploadFile as FormUploadFile
 
 from core.database import track_file
 from core.deps import get_db, optional_user, require_user
-from core.errors import NotFoundError, PermissionError_
+from core.errors import NotFoundError, PermissionError_, ValidationError
 from models.attachment import Attachment
 from models.memo import Memo
+from models.memo_like import MemoLike
 from models.user import User
 from schemas.common import Page
-from schemas.memo import MemoOut, MemoUpdateIn
+from schemas.memo import MemoLikesOut, MemoOut, MemoUpdateIn
 from services import memo_service, storage_service
 
 router = APIRouter(prefix="/memos", tags=["memos"])
+logger = logging.getLogger(__name__)
 
 MAX_IMAGES_PER_MEMO = 9
 
@@ -87,26 +96,106 @@ def get_memo(
 
 
 @router.patch("/{memo_id}", response_model=MemoOut)
-def update_memo(
+async def update_memo(
     memo_id: int,
-    body: MemoUpdateIn,
+    request: Request,
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    memo = db.query(Memo).filter(Memo.id == memo_id).first()
+    memo = db.query(Memo).filter(Memo.id == memo_id).with_for_update().first()
     if not memo:
         raise NotFoundError("帖子不存在")
     if not memo_service.can_modify(memo, user):
         raise PermissionError_("无权限")
 
-    updates = body.model_dump(exclude_unset=True, exclude_none=True)
+    # Keep JSON PATCH clients working; multipart adds image editing atomically.
+    images = []
+    try:
+        if "multipart/form-data" in request.headers.get("content-type", "").lower():
+            form = await request.form()
+            payload = {key: form[key] for key in MemoUpdateIn.model_fields if key in form}
+            if "remove_attachment_ids" in payload:
+                payload["remove_attachment_ids"] = json.loads(payload["remove_attachment_ids"])
+            images = form.getlist("images")
+            if any(not isinstance(image, FormUploadFile) for image in images):
+                raise ValidationError("图片字段必须是文件")
+            images = [image for image in images if image.filename]
+        else:
+            payload = await request.json()
+        body = MemoUpdateIn.model_validate(payload)
+    except (json.JSONDecodeError, TypeError):
+        raise ValidationError("请求内容或图片移除列表格式无效")
+    except SchemaValidationError as error:
+        raise RequestValidationError(error.errors()) from error
+
+    remove_ids = set(body.remove_attachment_ids)
+    attachments = {attachment.id: attachment for attachment in memo.attachments}
+    if not remove_ids.issubset(attachments):
+        raise ValidationError("只能移除此笔记已有的图片，请刷新后重试")
+    if len(attachments) - len(remove_ids) + len(images) > MAX_IMAGES_PER_MEMO:
+        raise ValidationError("每条笔记最多保留 9 张图片")
+
+    # New files are rolled back by get_db if any upload or the transaction fails.
+    for image in images:
+        stored = await storage_service.save_memo_image(image, memo.id)
+        track_file(db, stored.path)
+        memo.attachments.append(Attachment(
+            original_name=stored.original_name,
+            stored_filename=stored.filename,
+            mime_type=stored.content_type,
+            size_bytes=stored.size_bytes,
+        ))
+    removed_files = [attachments[attachment_id].stored_filename for attachment_id in remove_ids]
+    for attachment_id in remove_ids:
+        memo.attachments.remove(attachments[attachment_id])
+
+    updates = body.model_dump(exclude_unset=True, exclude_none=True, exclude={"remove_attachment_ids"})
     if "location" in updates:
         updates["location"] = updates["location"].strip() or None
     for field, value in updates.items():
         setattr(memo, field, value)
+    if images or remove_ids:
+        memo.updated_at = func.now()
 
     db.commit()
+    # Original files stay intact until the replacement has committed successfully.
+    for filename in removed_files:
+        try:
+            storage_service.delete_file(storage_service.settings.upload_dir, filename)
+        except OSError:
+            logger.warning("Could not remove detached memo image %s", filename, exc_info=True)
     return memo_service.to_out(memo_service.load_memo(memo_id, db, user), user)
+
+
+@router.put("/{memo_id}/like", response_model=MemoLikesOut)
+def like_memo(
+    memo_id: int,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    memo_service.load_memo(memo_id, db, user)
+    if db.get(MemoLike, (memo_id, user.id)) is None:
+        db.add(MemoLike(memo_id=memo_id, user_id=user.id))
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            # A simultaneous request from the same account may have liked it first.
+            if db.get(MemoLike, (memo_id, user.id)) is None:
+                raise
+    return memo_service.likes_out(memo_service.load_memo(memo_id, db, user), user)
+
+
+@router.delete("/{memo_id}/like", response_model=MemoLikesOut)
+def unlike_memo(
+    memo_id: int,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    memo_service.load_memo(memo_id, db, user)
+    db.query(MemoLike).filter(MemoLike.memo_id == memo_id, MemoLike.user_id == user.id).delete()
+    db.commit()
+    return memo_service.likes_out(memo_service.load_memo(memo_id, db, user), user)
 
 
 @router.delete("/{memo_id}", status_code=204)

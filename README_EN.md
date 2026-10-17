@@ -31,7 +31,7 @@ If Apocalypse is useful to you, consider giving it a ⭐. It helps other develop
 
 | Knowledge inputs | AI and execution | Capture and collaboration |
 |---|---|---|
-| GitHub Trending, Hugging Face, arXiv, conference papers, multi-source news | Streaming chat, page summaries, explanations, tool calling | Markdown notes, keyword search, multi-image posts, comments, direct messages |
+| GitHub Trending, Hugging Face, arXiv, conference papers, multi-source news | Streaming chat, page summaries, explanations, tool calling | Markdown notes, keyword search, multi-image posts, named likes, inline text/image editing, comments, direct messages |
 | Daily, weekly, and monthly feeds | Human approval, sandboxing, trajectory inspection, context compression | Local database, unified backups, admin console |
 | HotpotQA frozen corpus (66,581 passages, hashed) | Agentic RL: verifiers, concurrent rollout, GRPO | The event log is the training trajectory; environment fingerprints make runs reproducible |
 

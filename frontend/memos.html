@@ -1,26 +1,46 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>天启 Apocalypse | 笔记工作台</title>
+    <meta name="theme-color" content="#101419">
+    <title>天启 Apocalypse | 笔记广场</title>
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/components/floating-panel.css">
     <link rel="stylesheet" href="css/components/sprite-chat.css">
     <link rel="stylesheet" href="css/components/music-player.css">
     <link rel="stylesheet" href="css/pages/memos.css">
 </head>
-
-<body>
+<body class="memos-page">
+    <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+            <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+            <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></symbol>
+            <symbol id="icon-pen" viewBox="0 0 24 24"><path d="m15 5 4 4M4 20l5-1L20 8a2.8 2.8 0 0 0-4-4L5 15l-1 5Z"/></symbol>
+            <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+            <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+            <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+            <symbol id="icon-location" viewBox="0 0 24 24"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+            <symbol id="icon-comment" viewBox="0 0 24 24"><path d="M21 11.5a9 9 0 0 1-9 9 10 10 0 0 1-4-.8L3 21l1.3-5a9 9 0 1 1 16.7-4.5Z"/></symbol>
+            <symbol id="icon-heart" viewBox="0 0 24 24"><path d="M20.8 4.9a5.5 5.5 0 0 0-7.8 0L12 6l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.3a5.5 5.5 0 0 0 0-7.8Z"/></symbol>
+            <symbol id="icon-spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Zm7-1v4m-2-2h4"/></symbol>
+            <symbol id="icon-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+            <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+            <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></symbol>
+            <symbol id="icon-pin" viewBox="0 0 24 24"><path d="m16 3 5 5-4 1-3 5v3l-7-7h3l5-3 1-4ZM3 21l7-7"/></symbol>
+            <symbol id="icon-book" viewBox="0 0 24 24"><path d="M12 5v16M3 3c4 0 7 0 9 2 2-2 5-2 9-2v16c-4 0-7 0-9 2-2-2-5-2-9-2V3Z"/></symbol>
+            <symbol id="icon-code" viewBox="0 0 24 24"><path d="m7 6-6 6 6 6m10-12 6 6-6 6m-4-15-2 18"/></symbol>
+            <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+        </defs>
+    </svg>
     <div id="canvas-container"></div>
     <div class="noise-overlay"></div>
     <header class="header">
-        <nav class="nav">
-            <div class="logo">天启</div>
+        <nav class="nav" aria-label="主导航">
+            <a href="index.html" class="logo">天启</a>
             <ul class="nav-links">
                 <li><a href="index.html">首页</a></li>
-                <li><a href="memos.html" class="active">笔记</a></li>
+                <li><a href="memos.html" class="active" aria-current="page">笔记</a></li>
                 <li><a href="trending.html">热门项目</a></li>
                 <li><a href="papers.html">前沿论文</a></li>
                 <li><a href="focus.html">焦点新闻</a></li>
@@ -29,54 +49,87 @@
                 <li><a href="space.html">联系作者</a></li>
             </ul>
             <div class="nav-user" id="nav-user-area"></div>
-            <div class="nav-toggle"><span></span><span></span><span></span></div>
+            <button class="nav-toggle" type="button" aria-label="展开导航"><span></span><span></span><span></span></button>
         </nav>
     </header>
-
     <main class="page-layout">
-        <div class="section-header">
-            <div class="section-label">MEMOS</div>
-            <h1 class="page-title">我的<span
-                    style="background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">知识空间</span>
-            </h1>
-        </div>
-
-        <!-- Compose -->
-        <div id="compose-area"></div>
-
-        <!-- Memos list -->
-        <div class="memo-toolbar">
-            <div class="memo-visibility-filter">
-                <label for="memo-filter">查看笔记</label>
-                <select id="memo-filter" class="input"><option value="public">公开</option><option value="private">私密（作者和管理员可见，需登录）</option></select>
+        <aside class="memo-sidebar" aria-label="我的空间">
+            <section class="side-panel profile-panel">
+                <div class="profile-cover" aria-hidden="true"><span class="cover-orbit"></span><span class="cover-moon"></span><span class="cover-mountain"></span></div>
+                <div id="memo-profile" class="memo-profile">
+                    <img src="assets/images/default-avatar.svg" class="profile-avatar" width="64" height="64" alt="">
+                    <h2>每个想法，都有回响</h2>
+                    <p>在这里，收藏生活与思考。</p>
+                    <a href="login.html" class="profile-link">登录我的空间 <svg class="memo-icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a>
+                </div>
+            </section>
+            <nav class="space-nav" aria-label="笔记导航">
+                <button type="button" class="space-nav-item is-active" data-visibility="public" aria-pressed="true"><svg class="memo-icon" aria-hidden="true"><use href="#icon-grid"/></svg>广场动态<span class="nav-dot"></span></button>
+                <button type="button" class="space-nav-item" data-visibility="private" aria-pressed="false"><svg class="memo-icon" aria-hidden="true"><use href="#icon-lock"/></svg>私密笔记</button>
+                <a href="messages.html" class="space-nav-item"><svg class="memo-icon" aria-hidden="true"><use href="#icon-comment"/></svg>我的私聊<svg class="memo-icon nav-arrow" aria-hidden="true"><use href="#icon-arrow"/></svg></a>
+            </nav>
+            <button type="button" class="btn btn-primary write-memo-btn" data-compose-focus><svg class="memo-icon" aria-hidden="true"><use href="#icon-pen"/></svg>写一条笔记</button>
+            <p class="sidebar-footnote">APOCALYPSE / 灵感不散场</p>
+        </aside>
+        <section class="memo-feed" aria-labelledby="feed-title">
+            <div class="feed-heading">
+                <div><p class="feed-eyebrow"><span></span> 思想在这里相遇</p><h1 id="feed-title">笔记广场<span class="heading-period">.</span></h1></div>
+                <span class="feed-heading-note">记录 · 分享 · 连接</span>
             </div>
-            <form id="memo-search-form" class="memo-search-form" role="search" aria-label="搜索笔记">
-                <label class="memo-search-field" for="memo-search">
-                    <span>关键词搜索</span>
-                    <span class="memo-search-input"><input id="memo-search" class="input" type="search" placeholder="搜索笔记内容…" maxlength="200" autocomplete="off"></span>
-                </label>
-                <button class="btn btn-primary btn-sm" type="submit">搜索</button>
-                <button id="memo-search-clear" class="btn btn-sm" type="button" disabled>清空</button>
-            </form>
-        </div>
-        <p id="memo-search-status" role="status" aria-live="polite"></p>
-        <div id="memos-list"></div>
-        <button class="btn" id="load-more-btn">加载更多…</button>
+            <div id="compose-area"></div>
+            <div class="feed-panel">
+                <div class="feed-tabs-row">
+                    <div class="feed-tabs" role="group" aria-label="查看笔记">
+                        <button type="button" class="feed-tab is-active" data-visibility="public" aria-pressed="true">广场动态</button>
+                        <button type="button" class="feed-tab" data-visibility="private" aria-pressed="false">私密笔记<svg class="memo-icon" aria-hidden="true"><use href="#icon-lock"/></svg></button>
+                    </div>
+                    <span class="feed-order">最新发布</span>
+                </div>
+                <div class="memo-toolbar">
+                    <form id="memo-search-form" class="memo-search-form" role="search" aria-label="搜索笔记">
+                        <label class="memo-search-field" for="memo-search">
+                            <svg class="memo-icon" aria-hidden="true"><use href="#icon-search"/></svg>
+                            <span class="visually-hidden">关键词搜索</span>
+                            <input id="memo-search" type="search" placeholder="搜索笔记，找回一闪而过的灵感" maxlength="200" autocomplete="off">
+                        </label>
+                        <button id="memo-search-clear" class="search-clear" type="button" disabled aria-label="清空搜索" title="清空搜索"><svg class="memo-icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
+                        <button class="search-submit" type="submit">搜索</button>
+                    </form>
+                </div>
+                <div class="feed-status-row"><p id="memo-search-status" role="status" aria-live="polite"></p><span id="memo-feed-context">公开分享的每一个瞬间</span></div>
+                <div id="memos-list" aria-busy="true"></div>
+                <button class="btn" id="load-more-btn" type="button">加载更多笔记 <svg class="memo-icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button>
+            </div>
+            <p class="feed-endnote">把日子写成笔记，把灵感留给未来。</p>
+        </section>
+        <aside class="memo-discovery" aria-label="发现灵感">
+            <section class="side-panel inspiration-panel">
+                <div class="panel-eyebrow"><svg class="memo-icon" aria-hidden="true"><use href="#icon-spark"/></svg>给灵感一个起点</div>
+                <h2>今天，<br>有什么值得记住？</h2>
+                <p>一个新发现，一段小进步，<br>或者只是此刻的心情。</p>
+                <button type="button" class="inspiration-link" data-compose-focus>从一句话开始 <svg class="memo-icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button>
+                <span class="inspiration-decoration" aria-hidden="true">✳</span>
+            </section>
+            <section class="side-panel discovery-panel">
+                <h2>去发现更多<span>EXPLORE</span></h2>
+                <a href="trending.html" class="discovery-link"><span class="discovery-icon"><svg class="memo-icon" aria-hidden="true"><use href="#icon-code"/></svg></span><span><strong>热门项目</strong><small>遇见让人眼前一亮的创造</small></span><svg class="memo-icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a>
+                <a href="papers.html" class="discovery-link"><span class="discovery-icon"><svg class="memo-icon" aria-hidden="true"><use href="#icon-book"/></svg></span><span><strong>前沿论文</strong><small>让好奇心，再走远一点</small></span><svg class="memo-icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a>
+                <a href="focus.html" class="discovery-link"><span class="discovery-icon"><svg class="memo-icon" aria-hidden="true"><use href="#icon-globe"/></svg></span><span><strong>焦点新闻</strong><small>与正在发生的世界连接</small></span><svg class="memo-icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a>
+            </section>
+            <div class="memo-space-note"><svg class="memo-icon" aria-hidden="true"><use href="#icon-lock"/></svg><p>有些想法，只想留给自己。<br><span>私密笔记仅作者和管理员可见。</span></p></div>
+            <footer class="discovery-footer"><a href="space.html">关于天启</a><span>·</span><a href="tools.html">工具箱</a><p>一隅空间，无限思绪。</p></footer>
+        </aside>
     </main>
-
     <div id="sprite-container"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="js/core/utils.js"></script>
-  <script src="js/core/auth.js"></script>
-  <script src="js/core/api.js"></script>
-  <script src="js/core/ui.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="js/core/utils.js"></script>
+    <script src="js/core/auth.js"></script>
+    <script src="js/core/api.js"></script>
+    <script src="js/core/ui.js"></script>
     <script src="js/pages/memos.js"></script>
     <script src="js/widgets/floating-panel.js"></script>
     <script src="js/widgets/sprite-chat.js"></script>
     <script src="js/widgets/music-player.js"></script>
 </body>
-
 </html>
-
-
