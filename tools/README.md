@@ -12,6 +12,8 @@ Docker image — run them by hand from the repository root.
 | `toolbox_check.py` | Desktop/mobile browser acceptance for the five local utilities, clipboard/download, image transparency and URL cleanup, line limits, and existing tools/translation. Run `.venv/bin/python tools/toolbox_check.py`; requires Playwright and `/usr/bin/chromium`, and uses an isolated static server with mocked APIs. |
 | `memo_search_check.py` | Isolated real-API checks for memo keyword search, literal wildcard characters, pagination, anonymity and private access. Add `--browser` for desktop/mobile search, debounce, Chinese input, clearing and request ordering (requires Playwright and `/usr/bin/chromium`). |
 | `harness_check.py` | Connectivity self-check for the Harness subsystem: config, database, sandbox, tool registry, tool auto-discovery, skills, subagent wiring, artefact download (incl. packaged-skill install), approval policy, event-log projection, the live provider, and optionally the HTTP + SSE layer. Each stage runs independently and exits non-zero if any fail. |
+| `harness_pagination_check.py` | Isolated SQLite cursor paging and cross-page approval regression; requires SQLAlchemy and pydantic-settings. |
+| `harness_frontend_performance_check.py` | Browser regression for bounded event/message pages and a 4,000-fragment SSE burst; requires Playwright and Microsoft Edge. |
 | `harness_probe.py` | Drives one complete Harness turn with no browser and no server, printing the event log, the projected messages, token usage and the resulting workspace files. |
 
 ```bash

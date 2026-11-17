@@ -131,6 +131,24 @@
         container.__rendered = events.length;
     }
 
+    /** Keep only the current page while preserving expanded rows during a stream. */
+    function syncEvents(container, events, onFork) {
+        bindEventRows(container, onFork);
+        container.__events = events;
+        container.querySelector('.hs-empty')?.remove();
+        const firstSeq = events[0]?.seq;
+        let first = container.querySelector('.hs-event');
+        while (first && firstSeq !== undefined && Number(first.dataset.seq) < firstSeq) {
+            first.remove();
+            first = container.querySelector('.hs-event');
+        }
+        const rows = container.querySelectorAll('.hs-event');
+        const lastSeq = rows.length ? Number(rows[rows.length - 1].dataset.seq) : -1;
+        const added = events.filter((event) => event.seq > lastSeq);
+        if (added.length) container.insertAdjacentHTML('beforeend', added.map(eventRow).join(''));
+        container.__rendered = events.length;
+    }
+
     /** Model-visible messages tab — the projection, verbatim from the server. */
     function renderDerived(container, messages) {
         if (!messages.length) {
@@ -291,7 +309,7 @@
     }
 
     window.HarnessTrajectory = {
-        renderEvents, appendEvents, renderDerived, renderPlugins, renderFiles, renderUsage,
+        renderEvents, appendEvents, syncEvents, renderDerived, renderPlugins, renderFiles, renderUsage,
         summarize,
     };
 })();

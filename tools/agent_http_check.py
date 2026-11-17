@@ -32,6 +32,23 @@ def main():
             call_id=next(e for e in denied if e['type']=='tool/approval')['data']['tool_call_id']
             refusal=events(client.post(path+'/approvals/'+call_id,json={'approved':False}))
             assert any('拒绝' in str(e) for e in refusal)
+            history = client.get(path+'/events').json()
+            latest = client.get(path+'/events/page', params={'limit': 3}).json()
+            assert latest['items'] == history[-3:] and latest['has_more']
+            older = client.get(path+'/events/page', params={
+                'limit': 3, 'before': latest['items'][0]['seq'],
+            }).json()
+            assert older['items'] == history[-6:-3]
+            forward = client.get(path+'/events/page', params={
+                'limit': 3, 'after': older['items'][-1]['seq'],
+            }).json()
+            assert forward['items'] == latest['items'] and not forward['has_more']
+            conversation = client.get(path+'/events/page', params={
+                'limit': 100, 'conversation': 'true',
+            }).json()['items']
+            assert not any(event['type'] == 'assistant/chunk' for event in conversation)
+            assert all(event['data']['settled'] for event in conversation if event['type'] == 'tool/approval')
+            assert client.get(path+'/events/page', params={'before': 1, 'after': 0}).status_code == 400
             assert any(e['type']=='agent/error' for e in send('mock-error'))
             assert any(e['type']=='agent/error' for e in send('mock-timeout'))
             assert any(e['type']=='turn/end' for e in send('recover'))

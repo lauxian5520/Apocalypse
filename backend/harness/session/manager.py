@@ -4,6 +4,7 @@ The event log is immutable; this module owns the mutable header row that points
 at it — ownership, title, status — plus the workspace directory on disk.
 """
 import logging
+import json
 import shutil
 import uuid
 
@@ -361,15 +362,22 @@ def usage_summary(session_id: str) -> dict:
     else's: a readout that quietly omitted them would understate a delegating
     session by most of its actual cost.
     """
-    store = SqliteSessionStore()
     with SessionLocal() as db:
         child_ids = list(db.scalars(
             select(HarnessSession.id).where(HarnessSession.parent_id == session_id)
         ).all())
-
+        payloads = db.scalars(
+            select(HarnessEvent.data).where(
+                HarnessEvent.session_id.in_([session_id] + child_ids),
+                HarnessEvent.type == ev.LLM_USAGE,
+            )
+        ).all()
     usage = []
-    for sid in [session_id] + child_ids:
-        usage.extend(e.data for e in store.read(sid) if e.type == ev.LLM_USAGE)
+    for payload in payloads:
+        try:
+            usage.append(json.loads(payload))
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("[harness] unreadable usage event for %s", session_id)
     return pricing.summarize(usage)
 
 

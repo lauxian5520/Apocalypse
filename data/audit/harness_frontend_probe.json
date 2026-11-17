@@ -1,0 +1,82 @@
+[
+  {
+    "elapsed_ms": 1562.4000000003725,
+    "event_rows": 1004,
+    "dom_nodes": 5119,
+    "timer_delay_ms": 1576.2999999998137,
+    "longtasks": [
+      {
+        "start": 531.8999999994412,
+        "duration": 1564
+      }
+    ],
+    "count": 1000,
+    "mode": "original",
+    "errors": [],
+    "browser": "157.0.4341.60",
+    "layout_ms": 1427.2240000000002,
+    "layout_count": 1005
+  },
+  {
+    "elapsed_ms": 13789.5,
+    "event_rows": 2004,
+    "dom_nodes": 10119,
+    "timer_delay_ms": 13837,
+    "longtasks": [],
+    "count": 2000,
+    "mode": "original",
+    "errors": [],
+    "browser": "157.0.4341.60",
+    "layout_ms": 12660.534,
+    "layout_count": 2005
+  },
+  {
+    "elapsed_ms": 63221.299999999814,
+    "event_rows": 4004,
+    "dom_nodes": 20119,
+    "timer_delay_ms": 63373.39999999944,
+    "longtasks": [],
+    "count": 4000,
+    "mode": "original",
+    "errors": [],
+    "browser": "157.0.4341.60",
+    "layout_ms": 59078.438,
+    "layout_count": 4005
+  },
+  {
+    "elapsed_ms": 158,
+    "event_rows": 4004,
+    "dom_nodes": 20119,
+    "timer_delay_ms": 338.90000000037253,
+    "longtasks": [
+      {
+        "start": 1375,
+        "duration": 165
+      }
+    ],
+    "count": 4000,
+    "mode": "no_scroll",
+    "errors": [],
+    "browser": "157.0.4341.60",
+    "layout_ms": 120.696,
+    "layout_count": 1
+  },
+  {
+    "elapsed_ms": 35311.10000000056,
+    "event_rows": 0,
+    "dom_nodes": 111,
+    "timer_delay_ms": 35322.200000000186,
+    "longtasks": [
+      {
+        "start": 2036.5999999996275,
+        "duration": 35321
+      }
+    ],
+    "count": 4000,
+    "mode": "plugins_tab",
+    "errors": [],
+    "browser": "157.0.4341.60",
+    "layout_ms": 33614.72,
+    "layout_count": 4003
+  }
+]

@@ -11,11 +11,17 @@
 
     const el = (id) => document.getElementById(id);
     const dom = {};
+    let viewVersion = 0;
+    const PAGE_SIZE = 100;
+    const VISIBLE_TYPES = new Set(['user/message', 'assistant/message', 'tool/result',
+        'tool/approval', 'agent/error', 'agent/interrupt', 'subagent/end']);
 
     const state = {
         ready: false,
         sessionId: '',
         events: [],
+        rawEvents: [],
+        pages: { conversation: {}, raw: {} },
         registry: null,
         tab: 'events',
         running: false,
@@ -75,9 +81,18 @@
     }
 
     async function openSession(sessionId) {
+        const version = ++viewVersion;
         state.sessionId = sessionId;
-        state.events = await apiFetch(`/harness/sessions/${sessionId}/events`);
-        const detail = await apiFetch(`/harness/sessions/${sessionId}`);
+        state.ownTurn = false;
+        const [conversation, raw, detail] = await Promise.all([
+            fetchPage(sessionId, 'conversation'), fetchPage(sessionId, 'raw'),
+            apiFetch(`/harness/sessions/${sessionId}`),
+        ]);
+        if (state.sessionId !== sessionId || version !== viewVersion) return;
+        state.events = conversation.items;
+        state.rawEvents = raw.items;
+        state.pages = { conversation: { older: conversation.has_more, newer: false },
+            raw: { older: raw.has_more, newer: false } };
 
         dom.title.textContent = detail.title || '未命名会话';
         dom.subtitle.textContent =
@@ -96,6 +111,48 @@
         // refresh appeared not to help. Trust the server's status instead.
         adoptRunning(detail.status === 'running');
         await loadSessions();
+    }
+
+    async function fetchPage(sessionId, kind, cursor = '') {
+        const mode = kind === 'conversation' ? '&conversation=true' : '';
+        return apiFetch(`/harness/sessions/${sessionId}/events/page?limit=${PAGE_SIZE}${mode}${cursor}`);
+    }
+
+    async function changePage(kind, direction) {
+        const sessionId = state.sessionId;
+        const version = viewVersion;
+        const events = kind === 'conversation' ? state.events : state.rawEvents;
+        if (!events.length || !sessionId) return;
+        const cursor = direction === 'older' ? `&before=${events[0].seq}`
+            : `&after=${events[events.length - 1].seq}`;
+        const result = await fetchPage(sessionId, kind, cursor);
+        if (sessionId !== state.sessionId || version !== viewVersion || state.running || !result.items.length) return;
+        if (kind === 'conversation') state.events = result.items;
+        else state.rawEvents = result.items;
+        state.pages[kind] = direction === 'older'
+            ? { older: result.has_more, newer: true }
+            : { older: true, newer: result.has_more };
+        if (kind === 'conversation') renderConversation();
+        else renderTab();
+    }
+
+    function pageControls(kind) {
+        const page = state.pages[kind];
+        const bar = document.createElement('div');
+        bar.className = 'hs-page-controls';
+        bar.dataset.kind = kind;
+        for (const [direction, label] of [['older', '上一页'], ['newer', '下一页']]) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-sm';
+            button.textContent = label;
+            button.dataset.direction = direction;
+            button.disabled = !page[direction] || state.running;
+            button.addEventListener('click', () => changePage(kind, direction)
+                .catch((error) => toast(error.message, 'error')));
+            bar.appendChild(button);
+        }
+        return bar;
     }
 
     /** A child session has no sidebar row, so it needs its own way back up. */
@@ -123,6 +180,7 @@
             return;
         }
         dom.conversation.innerHTML = '';
+        dom.conversation.appendChild(pageControls('conversation'));
         state.events.forEach(appendEvent);
         sizeOutput(dom.conversation);
         scrollDown();
@@ -130,7 +188,10 @@
 
     function appendEvent(event) {
         const node = buildNode(event);
-        if (node) dom.conversation.appendChild(node);
+        if (node) {
+            node.dataset.eventSeq = event.seq;
+            dom.conversation.appendChild(node);
+        }
     }
 
     function buildNode(event) {
@@ -179,14 +240,23 @@
                 <span class="hs-caret">${isTodo ? '▾' : '▸'}</span>
             </div>
             <div class="hs-tool-body${isTodo ? '' : ' hs-hidden'}">
-                ${call ? `<pre>参数：${esc(call.function?.arguments || '')}</pre>` : ''}
-                <pre class="${isTodo ? 'hs-todo' : ''}">${esc(d.content || '')}</pre>
+                ${isTodo ? `<pre class="hs-todo">${esc(d.content || '')}</pre>` : ''}
             </div>`;
 
         const head = node.querySelector('.hs-tool-head');
         head.addEventListener('click', () => {
             const body = node.querySelector('.hs-tool-body');
             body.classList.toggle('hs-hidden');
+            if (!body.classList.contains('hs-hidden') && !body.firstElementChild) {
+                if (call) {
+                    const args = document.createElement('pre');
+                    args.textContent = `参数：${call.function?.arguments || ''}`;
+                    body.appendChild(args);
+                }
+                const content = document.createElement('pre');
+                content.textContent = d.content || '';
+                body.appendChild(content);
+            }
             node.querySelector('.hs-caret').textContent = body.classList.contains('hs-hidden') ? '▸' : '▾';
             // A hidden element reports scrollHeight 0, so the box can only be
             // measured once it is on screen.
@@ -228,7 +298,7 @@
         node.className = 'hs-tool hs-tool-approval';
         // A resolved approval is history: its buttons would be dead, so the
         // card renders read-only once a result for the same call exists.
-        const settled = state.events.some(
+        const settled = d.settled || state.events.some(
             (e) => e.type === 'tool/result' && e.data?.tool_call_id === d.tool_call_id);
 
         node.innerHTML = `
@@ -263,7 +333,7 @@
         return null;
     }
 
-    const oneLine = (text) => String(text || '').replace(/\s+/g, ' ').slice(0, 90);
+    const oneLine = (text) => String(text || '').slice(0, 300).replace(/\s+/g, ' ').slice(0, 90);
     const scrollDown = () => { dom.conversation.scrollTop = dom.conversation.scrollHeight; };
 
     // ── running a turn ───────────────────────────────────────
@@ -283,8 +353,12 @@
             `/harness/sessions/${state.sessionId}/approvals/${callId}`, { approved });
     }
 
-    /** Consume one SSE turn, appending events live to both panes. */
+    /** Batch stream updates so each frame performs at most one layout. */
     async function runStream(path, body) {
+        const sessionId = state.sessionId;
+        if (state.pages.conversation.newer || state.pages.raw.newer) await openSession(sessionId);
+        if (sessionId !== state.sessionId) return;
+        const version = viewVersion;
         clearTimeout(adoptTimer);
         state.ownTurn = true;
         setRunning(true);
@@ -292,66 +366,111 @@
         typing.className = 'hs-typing';
         typing.textContent = '思考中…';
         dom.conversation.appendChild(typing);
-
-        // Assistant text arrives as chunks; stream it into one growing bubble
-        // so the user sees tokens rather than a wait then a wall of text.
         let streamingBubble = null;
         let streamed = '';
+        let pending = [];
+        let frame = null;
+        let fallback = null;
+        let resume = null;
 
-        try {
-            await streamEvents(path, body, {
-                onEvent: (event) => {
-                    state.events.push(event);
-
-                    if (event.type === 'assistant/chunk') {
+        function flush() {
+            if (frame !== null) cancelAnimationFrame(frame);
+            clearTimeout(fallback);
+            frame = null;
+            fallback = null;
+            const batch = pending;
+            pending = [];
+            if (resume) { resume(); resume = null; }
+            if (state.sessionId !== sessionId || version !== viewVersion || !typing.isConnected) return;
+            const follow = dom.conversation.scrollHeight - dom.conversation.scrollTop
+                - dom.conversation.clientHeight < 80;
+            let textChanged = false;
+            for (const event of batch) {
+                state.rawEvents.push(event);
+                if (state.rawEvents.length > PAGE_SIZE) {
+                    state.rawEvents.shift();
+                    state.pages.raw.older = true;
+                }
+                if (event.type === 'assistant/chunk') {
+                    const delta = event.data.delta || '';
+                    if (delta) {
                         if (!streamingBubble) {
                             streamingBubble = bubble('hs-msg hs-msg-assistant', '');
                             dom.conversation.insertBefore(streamingBubble, typing);
                         }
-                        streamed += event.data.delta || '';
-                        streamingBubble.querySelector('pre').textContent = streamed;
-                    } else {
-                        if (event.type === 'assistant/message' && streamingBubble) {
-                            // The final message supersedes the chunks it was
-                            // assembled from; drop the placeholder.
-                            streamingBubble.remove();
-                            streamingBubble = null;
-                            streamed = '';
-                        }
-                        const node = buildNode(event);
-                        if (node) dom.conversation.insertBefore(node, typing);
+                        streamed += delta;
+                        textChanged = true;
                     }
+                    continue;
+                }
+                if (event.type === 'assistant/message' && streamingBubble) {
+                    streamingBubble.remove();
+                    streamingBubble = null;
+                    streamed = '';
+                    textChanged = false;
+                }
+                if (VISIBLE_TYPES.has(event.type)) {
+                    state.events.push(event);
+                    if (state.events.length > PAGE_SIZE) {
+                        const removed = state.events.shift();
+                        state.pages.conversation.older = true;
+                        dom.conversation.querySelector(`[data-event-seq="${removed.seq}"]`)?.remove();
+                    }
+                    const node = buildNode(event);
+                    if (node) {
+                        node.dataset.eventSeq = event.seq;
+                        dom.conversation.insertBefore(node, typing);
+                    }
+                }
+            }
+            if (textChanged && streamingBubble) streamingBubble.firstChild.textContent = streamed;
+            if (state.tab === 'events') {
+                T.syncEvents(dom.tabBody, state.rawEvents, forkSession);
+                const controls = dom.tabBody.querySelector('.hs-page-controls');
+                if (controls) controls.replaceWith(pageControls('raw'));
+            }
+            if (follow) scrollDown();
+        }
 
-                    // Append, never re-render: renderTab() rebuilds the whole
-                    // log, and calling it per streamed chunk is quadratic — it
-                    // was costing 24ms per event and 30s of blocked main
-                    // thread by the 2000th, which is the page freezing.
-                    if (state.tab === 'events') {
-                        T.appendEvents(dom.tabBody, state.events, forkSession);
+        try {
+            await streamEvents(path, body, {
+                onEvent: (event) => {
+                    if (state.sessionId !== sessionId || version !== viewVersion) return;
+                    pending.push(event);
+                    if (frame === null) {
+                        frame = requestAnimationFrame(flush);
+                        fallback = setTimeout(flush, 100);
                     }
-                    scrollDown();
+                    if (pending.length >= 256) return new Promise((resolve) => { resume = resolve; });
                 },
                 onError: (message) => {
-                    dom.conversation.insertBefore(
-                        bubble('hs-msg hs-msg-error', `⚠ ${message}`), typing);
+                    if (state.sessionId === sessionId && version === viewVersion && typing.isConnected)
+                        dom.conversation.insertBefore(bubble('hs-msg hs-msg-error', `⚠ ${message}`), typing);
                 },
             });
         } catch (e) {
-            toast(e.message, 'error');
-            dom.conversation.insertBefore(bubble('hs-msg hs-msg-error', `⚠ ${e.message}`), typing);
+            if (state.sessionId === sessionId && version === viewVersion && typing.isConnected) {
+                toast(e.message, 'error');
+                dom.conversation.insertBefore(bubble('hs-msg hs-msg-error', `⚠ ${e.message}`), typing);
+            }
         } finally {
+            flush();
             typing.remove();
+            if (state.sessionId !== sessionId || version !== viewVersion) return;
             state.ownTurn = false;
             setRunning(false);
-            // Titles and usage are settled server-side after the turn.
-            if (state.sessionId) {
-                const detail = await apiFetch(`/harness/sessions/${state.sessionId}`);
-                dom.title.textContent = detail.title || '未命名会话';
-                dom.subtitle.textContent = `${detail.preset} · ${detail.status}` +
-                    (detail.workspace_files.length ? ` · ${detail.workspace_files.length} 个文件` : '');
-                T.renderUsage(dom.usage, detail.usage);
-                await loadSessions();
-            }
+            const detail = await apiFetch(`/harness/sessions/${sessionId}`);
+            if (state.sessionId !== sessionId || version !== viewVersion) return;
+            dom.title.textContent = detail.title || '未命名会话';
+            dom.subtitle.textContent = `${detail.preset} · ${detail.status}` +
+                (detail.workspace_files.length ? ` · ${detail.workspace_files.length} 个文件` : '');
+            T.renderUsage(dom.usage, detail.usage);
+            // Refresh page controls and reconcile a disconnected but still-running turn.
+            const controls = dom.conversation.querySelector('.hs-page-controls');
+            if (controls) controls.replaceWith(pageControls('conversation'));
+            renderTab();
+            adoptRunning(detail.status === 'running');
+            await loadSessions();
         }
     }
 
@@ -359,6 +478,12 @@
         state.running = running;
         dom.send.disabled = running;
         dom.interrupt.classList.toggle('hs-hidden', !running);
+        document.querySelectorAll('.hs-page-controls').forEach((bar) => {
+            const page = state.pages[bar.dataset.kind];
+            bar.querySelectorAll('button').forEach((button) => {
+                button.disabled = running || !page?.[button.dataset.direction];
+            });
+        });
     }
 
     /* A turn outlives the page that started it. If this tab reloads — or was
@@ -382,9 +507,9 @@
                 const d = await apiFetch(`/harness/sessions/${state.sessionId}`);
                 if (d.status === 'running') { adoptTimer = setTimeout(poll, 2000); return; }
                 setRunning(false);
-                state.events = await apiFetch(`/harness/sessions/${state.sessionId}/events`);
-                renderConversation();
-                renderTab();
+                const sessionId = state.sessionId;
+                await openSession(sessionId);
+                if (state.sessionId !== sessionId) return;
                 T.renderUsage(dom.usage, d.usage);
                 dom.subtitle.textContent = `${d.preset} · ${d.status}`;
                 await loadSessions();
@@ -407,7 +532,8 @@
 
     function renderTab() {
         if (state.tab === 'events') {
-            T.renderEvents(dom.tabBody, state.events, forkSession);
+            T.renderEvents(dom.tabBody, state.rawEvents, forkSession);
+            dom.tabBody.prepend(pageControls('raw'));
         } else if (state.tab === 'messages') {
             renderDerivedTab();
         } else if (state.tab === 'files') {
@@ -495,6 +621,8 @@
         await apiFetch(`/harness/sessions/${state.sessionId}`, { method: 'DELETE' });
         state.sessionId = '';
         state.events = [];
+        state.rawEvents = [];
+        state.pages = { conversation: {}, raw: {} };
         dom.title.textContent = 'Harness 工作台';
         dom.subtitle.textContent = '选择左侧会话，或新建一个开始';
         T.renderUsage(dom.usage, null);

@@ -105,6 +105,25 @@ def read_events(
     return [e.to_dict() for e in SqliteSessionStore().read(session_id, after_seq=after)]
 
 
+@router.get("/sessions/{session_id}/events/page")
+def read_events_page(
+    session_id: str,
+    limit: int = Query(100, ge=1, le=200),
+    before: int | None = Query(None, ge=0),
+    after: int | None = Query(None, ge=-1),
+    conversation: bool = False,
+    user: User = Depends(require_harness_user),
+) -> dict:
+    """Read recent or cursor-bounded events without loading the entire log."""
+    manager.get_owned(session_id, user.id)
+    if before is not None and after is not None:
+        raise ValidationError("不能同时指定 before 和 after")
+    events, has_more = SqliteSessionStore().read_page(
+        session_id, limit, before_seq=before, after_seq=after, conversation=conversation,
+    )
+    return {"items": [event.to_dict() for event in events], "has_more": has_more}
+
+
 @router.get("/sessions/{session_id}/children", response_model=list[ChildSessionOut])
 def read_children(session_id: str, user: User = Depends(require_harness_user)):
     """Subagent runs this session dispatched — where a `subagent/*` event links to."""

@@ -38,6 +38,7 @@
         const decoder = new TextDecoder();
         let buffer = '';
 
+        let sliceStarted = performance.now();
         while (true) {
             const { value, done } = await reader.read();
             if (done) break;
@@ -60,7 +61,16 @@
                 }
                 // Once headers are flushed the server reports failures in-band.
                 if (obj.error) onError?.(obj.error);
-                else onEvent?.(obj);
+                else {
+                    const wait = onEvent?.(obj);
+                    if (wait) await wait;
+                }
+                // A network read may contain thousands of frames. Let input and
+                // rendering run even when all of them are already buffered.
+                if (performance.now() - sliceStarted >= 8) {
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                    sliceStarted = performance.now();
+                }
             }
         }
     }

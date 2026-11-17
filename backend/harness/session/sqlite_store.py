@@ -94,6 +94,50 @@ class SqliteSessionStore:
             )
             return [_to_event(r) for r in rows]
 
+    def read_page(
+        self, session_id: str, limit: int, before_seq: int | None = None,
+        after_seq: int | None = None, conversation: bool = False,
+    ) -> tuple[list[SessionEvent], bool]:
+        """Read one bounded page in chronological order."""
+        with self._session_factory() as db:
+            query = db.query(HarnessEvent).filter(HarnessEvent.session_id == session_id)
+            if conversation:
+                query = query.filter(HarnessEvent.type.in_((
+                    "user/message", "assistant/message", "tool/result", "tool/approval",
+                    "agent/error", "agent/interrupt", "subagent/end",
+                )))
+            if before_seq is not None:
+                query = query.filter(HarnessEvent.seq < before_seq)
+            if after_seq is not None:
+                query = query.filter(HarnessEvent.seq > after_seq)
+            ascending = after_seq is not None
+            query = query.order_by(HarnessEvent.seq if ascending else HarnessEvent.seq.desc())
+            rows = query.limit(limit + 1).all()
+            has_more = len(rows) > limit
+            rows = rows[:limit]
+            if not ascending:
+                rows.reverse()
+            events = [_to_event(row) for row in rows]
+            if conversation:
+                # Approval and its result may be on different pages. Preserve
+                # read-only history even when the result is not in this page.
+                for item in events:
+                    if item.type != "tool/approval":
+                        continue
+                    call_id = item.data.get("tool_call_id")
+                    if not call_id:
+                        continue
+                    candidates = db.query(HarnessEvent.data).filter(
+                        HarnessEvent.session_id == session_id,
+                        HarnessEvent.type == "tool/result",
+                        HarnessEvent.seq > item.seq,
+                        HarnessEvent.data.contains(call_id, autoescape=True),
+                    )
+                    item.data["settled"] = any(
+                        json.loads(row.data).get("tool_call_id") == call_id for row in candidates
+                    )
+            return events, has_more
+
     def next_seq(self, session_id: str) -> int:
         with self._session_factory() as db:
             return self._next_seq(db, session_id)
